@@ -3,6 +3,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { ShoppingBag, Menu, X, Instagram, MessageCircle } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 const links = ['Home', 'About', 'Designs', 'Services', 'Shop', 'Booking'];
+const instagramHandle = import.meta.env.VITE_INSTAGRAM_HANDLE;
+const whatsappNumber = import.meta.env.VITE_WHATSAPP_NUMBER;
 
 export default function Navbar() {
   const [scrolled, setScrolled] = useState(false);
@@ -39,10 +41,10 @@ export default function Navbar() {
         </nav>
 
         <div className="nav-r">
-          <a href="https://www.instagram.com/glossedbyridhi/" aria-label="Instagram">
+          <a href={`https://www.instagram.com/${instagramHandle}/`} aria-label="Instagram">
             <Instagram size={18} />
           </a>
-          <a href="https://wa.me/918279397721" aria-label="WhatsApp">
+          <a href={`https://wa.me/${whatsappNumber}`} aria-label="WhatsApp">
             <MessageCircle size={18} />
           </a>
 

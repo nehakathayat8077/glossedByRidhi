@@ -1,0 +1,8 @@
+# Local environment variables; keep the shareable template tracked.
+.env
+.env.*
+!.env.example
+
+# Build output and installed packages.
+node_modules/
+dist/

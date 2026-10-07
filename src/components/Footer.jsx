@@ -1,5 +1,7 @@
 import { useCart } from '../context/CartContext';
 
+const whatsappNumber = import.meta.env.VITE_WHATSAPP_NUMBER;
+
 export default function Footer() {
   const { say, toast } = useCart();
 
@@ -32,7 +34,7 @@ export default function Footer() {
         <p className="wrap copy">© 2026 Glossed By Ridhi. All Rights Reserved.</p>
       </footer>
 
-      <a className="wa" href="https://wa.me/918279397721" aria-label="WhatsApp">
+      <a className="wa" href={`https://wa.me/${whatsappNumber}`} aria-label="WhatsApp">
         WhatsApp
       </a>
 
