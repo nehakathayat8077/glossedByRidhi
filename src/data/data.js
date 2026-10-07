@@ -55,28 +55,26 @@ export const cats = [
 ];
 
 export const designs = [
-  {
+   {
     id: 'd1',
     name: 'Blush Milk Bath',
     cat: 'Minimal',
     price: 899,
-    img: img('d1'),
-    text: 'Sheer milky pink with a soft gloss top coat.',
+    img: '/images/designs/design-01.jpg',
   },
   {
     id: 'd2',
     name: 'Champagne French',
     cat: 'French',
     price: 999,
-    img: img('d2'),
-    text: 'Gold-dusted French tips on a nude base.',
+    img: '/images/designs/design-07.jpg',
   },
   {
     id: 'd3',
     name: 'Rose Chrome',
     cat: 'Chrome',
     price: 1099,
-    img: img('d3'),
+    img: '/images/designs/design-03.jpg',
     text: 'Mirror rose chrome over a sheer pink base.',
   },
   {
@@ -84,7 +82,7 @@ export const designs = [
     name: 'Wild Peony',
     cat: 'Floral',
     price: 1199,
-    img: img('d4'),
+    img: '/images/designs/design-04.jpg',
     text: 'Hand-painted peonies in burgundy and blush.',
   },
   {
@@ -92,7 +90,7 @@ export const designs = [
     name: 'Veil & Pearl',
     cat: 'Bridal',
     price: 1499,
-    img: img('d5'),
+    img: '/images/designs/design-08.jpg',
     text: 'Soft ivory with pearls and fine lace detail.',
   },
   {
@@ -100,7 +98,7 @@ export const designs = [
     name: 'Midnight Sparkle',
     cat: 'Party',
     price: 1299,
-    img: img('d6'),
+    img: '/images/designs/design-06.jpg',  
     text: 'Deep wine base with scattered glitter.',
   },
   {
@@ -108,7 +106,7 @@ export const designs = [
     name: 'Strawberry Milk',
     cat: 'Cute',
     price: 999,
-    img: img('d7'),
+    img: '/images/designs/design-02.jpg',  
     text: 'Tiny hearts and cherries on pastel pink.',
   },
   {
@@ -116,7 +114,7 @@ export const designs = [
     name: 'Nude Lines',
     cat: 'Minimal',
     price: 849,
-    img: img('d8'),
+    img: '/images/designs/design-05.jpg',  
     text: 'Fine gold lines across a neutral nude.',
   },
 ];
