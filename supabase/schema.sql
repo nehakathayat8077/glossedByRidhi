@@ -37,16 +37,19 @@ create table if not exists public.products (
 
 create table if not exists public.appointments (
   id uuid primary key default gen_random_uuid(),
+  customer_id uuid references auth.users(id) on delete set null,
   name text not null,
   phone text not null,
   email text not null,
   service_id uuid references public.services(id) on delete set null,
+  design_id uuid references public.designs(id) on delete set null,
   appointment_date date not null,
   time_slot time not null,
   notes text,
   status text not null default 'pending'
     check (status in ('pending', 'confirmed', 'completed', 'cancelled')),
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
 );
 
 create unique index if not exists appointments_one_active_booking_per_slot
@@ -92,7 +95,7 @@ alter table public.business_settings enable row level security;
 
 grant usage on schema public to anon, authenticated;
 grant select on public.services, public.designs, public.products, public.business_settings to anon;
-grant insert (name, phone, email, service_id, appointment_date, time_slot, notes)
+grant insert (name, phone, email, service_id, design_id, appointment_date, time_slot, notes)
   on public.appointments to anon;
 grant insert (email) on public.newsletter_subscribers to anon;
 grant select, insert, update, delete
@@ -113,6 +116,106 @@ $$;
 revoke all on function public.is_admin() from public;
 grant execute on function public.is_admin() to authenticated;
 
+create or replace function public.prepare_appointment_request()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  active_service boolean;
+  active_design boolean;
+  settings record;
+begin
+  if not public.is_admin() then
+    new.id := gen_random_uuid();
+    new.customer_id := auth.uid();
+    new.status := 'pending';
+    new.created_at := now();
+  end if;
+
+  if length(trim(coalesce(new.name, ''))) < 2 or length(trim(new.name)) > 120 then
+    raise exception 'Enter a name between 2 and 120 characters.';
+  end if;
+  if length(regexp_replace(coalesce(new.phone, ''), '[^0-9]', '', 'g')) < 7
+    or length(regexp_replace(new.phone, '[^0-9]', '', 'g')) > 15 then
+    raise exception 'Enter a valid phone number.';
+  end if;
+  if new.email !~ '^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]+$' then
+    raise exception 'Enter a valid email address.';
+  end if;
+  if new.appointment_date < current_date then
+    raise exception 'Appointment date must be today or later.';
+  end if;
+  if new.service_id is null then
+    raise exception 'Select a service.';
+  end if;
+
+  select s.is_active into active_service
+  from public.services as s
+  where s.id = new.service_id;
+  if not found or not active_service then
+    raise exception 'The selected service is no longer available.';
+  end if;
+
+  if new.design_id is not null then
+    select d.is_active into active_design
+    from public.designs as d
+    where d.id = new.design_id;
+    if not found or not active_design then
+      raise exception 'The selected nail design is no longer available.';
+    end if;
+  end if;
+
+  if length(coalesce(new.notes, '')) > 2000 then
+    raise exception 'Appointment notes must be 2,000 characters or fewer.';
+  end if;
+
+  select bs.working_start, bs.working_end, bs.slot_duration_minutes, bs.off_days
+    into settings
+    from public.business_settings as bs
+    order by bs.created_at
+    limit 1;
+
+  if found then
+    if extract(dow from new.appointment_date)::integer = any(settings.off_days) then
+      raise exception 'The studio is closed on the selected date.';
+    end if;
+    if new.time_slot < settings.working_start
+      or new.time_slot + make_interval(mins => settings.slot_duration_minutes) > settings.working_end
+      or mod(extract(epoch from (new.time_slot - settings.working_start))::integer, settings.slot_duration_minutes) <> 0 then
+      raise exception 'Choose a time slot within the studio hours.';
+    end if;
+  end if;
+
+  new.updated_at := now();
+  return new;
+end;
+$$;
+
+revoke all on function public.prepare_appointment_request() from public;
+
+create trigger appointments_prepare_request
+  before insert on public.appointments
+  for each row execute function public.prepare_appointment_request();
+
+create or replace function public.touch_appointment_updated_at()
+returns trigger
+language plpgsql
+set search_path = ''
+as $$
+begin
+  new.updated_at := now();
+  return new;
+end;
+$$;
+
+revoke all on function public.touch_appointment_updated_at() from public;
+
+create trigger appointments_touch_updated_at
+  before update on public.appointments
+  for each row execute function public.touch_appointment_updated_at();
+
 create policy "Public can read active services"
   on public.services for select to anon using (is_active);
 create policy "Public can read active designs"
@@ -121,6 +224,9 @@ create policy "Public can read active products"
   on public.products for select to anon using (is_active);
 create policy "Public can request appointments"
   on public.appointments for insert to anon with check (status = 'pending');
+create policy "Customers can request appointments"
+  on public.appointments for insert to authenticated
+  with check (status = 'pending' and customer_id = auth.uid());
 create policy "Public can subscribe to newsletter"
   on public.newsletter_subscribers for insert to anon with check (true);
 create policy "Public can read business settings"

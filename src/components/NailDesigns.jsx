@@ -87,6 +87,9 @@ export default function NailDesigns() {
                 <button
                   className="btn"
                   onClick={() => {
+                    window.dispatchEvent(new CustomEvent('booking:select-design', {
+                      detail: { id: selected.id, name: selected.name },
+                    }));
                     setSelected(null);
                     document.getElementById('booking')?.scrollIntoView({ behavior: 'smooth' });
                   }}

@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import { Modal } from './NailDesigns';
-import { loadActiveServices } from '../lib/catalogLoaders';
+import { loadActiveDesigns, loadActiveServices } from '../lib/catalogLoaders';
 import { useCatalogData } from '../hooks/useCatalogData';
 import { supabase } from '../lib/supabaseClient';
 
@@ -15,6 +15,7 @@ export async function saveBooking(booking) {
     phone: booking.phone.trim(),
     email: booking.email.trim(),
     service_id: booking.service,
+    design_id: booking.design_id || null,
     appointment_date: booking.date,
     time_slot: booking.time,
     notes: notes || null,
@@ -29,11 +30,29 @@ const empty = {
   date: '',
   time: '',
   service: '',
+  design_id: '',
   shape: 'Almond',
   note: '',
 };
 
 const noFallbackServices = [];
+const noFallbackDesigns = [];
+
+function BookingField({ label, name, value, onChange, error, type = 'text', children, ...inputProps }) {
+  return (
+    <label>
+      {label}
+      {children || <input name={name} type={type} value={value} onChange={onChange} {...inputProps} />}
+      {error && <small>{error}</small>}
+    </label>
+  );
+}
+
+function localDateValue() {
+  const today = new Date();
+  const offset = today.getTimezoneOffset();
+  return new Date(today.getTime() - offset * 60_000).toISOString().slice(0, 10);
+}
 
 function getTimeSlots(settings) {
   if (!settings) return [];
@@ -64,12 +83,43 @@ export default function Booking() {
   const [bookedSlots, setBookedSlots] = useState([]);
   const [slotsLoading, setSlotsLoading] = useState(false);
   const [slotsError, setSlotsError] = useState('');
+  const [pendingDesignSelection, setPendingDesignSelection] = useState(null);
+  const submissionLock = useRef(false);
   const { items: services, loading: servicesLoading } = useCatalogData(
     loadActiveServices,
     noFallbackServices,
     'booking services',
   );
+  const { items: designs, loading: designsLoading } = useCatalogData(
+    loadActiveDesigns,
+    noFallbackDesigns,
+    'booking designs',
+  );
   const timeSlots = useMemo(() => getTimeSlots(businessSettings), [businessSettings]);
+
+  useEffect(() => {
+    const selectDesign = (event) => {
+      setPendingDesignSelection(event.detail);
+      setErrors((current) => ({ ...current, design: '' }));
+    };
+    window.addEventListener('booking:select-design', selectDesign);
+    return () => window.removeEventListener('booking:select-design', selectDesign);
+  }, []);
+
+  useEffect(() => {
+    if (!pendingDesignSelection || designsLoading) return;
+    const design = designs.find((item) => item.id === pendingDesignSelection.id);
+    if (design) {
+      setForm((current) => ({ ...current, design_id: design.id }));
+      setErrors((current) => ({ ...current, design: '' }));
+    } else {
+      setErrors((current) => ({
+        ...current,
+        design: `${pendingDesignSelection.name || 'That design'} is no longer available. Please choose another design.`,
+      }));
+    }
+    setPendingDesignSelection(null);
+  }, [pendingDesignSelection, designs, designsLoading]);
 
   useEffect(() => {
     let mounted = true;
@@ -134,53 +184,59 @@ export default function Booking() {
       [key]: value,
       ...(key === 'date' ? { time: '' } : {}),
     }));
+    setErrors((current) => {
+      const next = { ...current, [key]: '' };
+      delete next.submit;
+      return next;
+    });
   };
 
   const submit = async (event) => {
     event.preventDefault();
+    if (submissionLock.current) return;
     const nextErrors = {};
 
-    if (form.name.trim().length < 2) nextErrors.name = 'Enter your full name';
-    if (!/^[6-9]\d{9}$/.test(form.phone)) nextErrors.phone = 'Enter a 10-digit mobile number';
-    if (!/^\S+@\S+\.\S+$/.test(form.email)) nextErrors.email = 'Enter a valid email';
+    if (form.name.trim().length < 2 || form.name.trim().length > 120) nextErrors.name = 'Enter a name between 2 and 120 characters.';
+    if (!/^[6-9]\d{9}$/.test(form.phone.trim())) nextErrors.phone = 'Enter a valid 10-digit mobile number.';
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) nextErrors.email = 'Enter a valid email address.';
     if (!form.date) nextErrors.date = 'Pick a date';
+    else if (form.date < localDateValue()) nextErrors.date = 'Choose today or a future date.';
     if (!form.time) nextErrors.time = 'Pick a time';
-    if (!form.service) nextErrors.service = 'Choose a service';
+    if (!services.some((service) => service.id === form.service)) nextErrors.service = 'Choose an available service.';
+    if (form.design_id && !designs.some((design) => design.id === form.design_id)) {
+      nextErrors.design = 'Choose a currently available design, or clear this selection.';
+    }
+    if (form.note.trim().length > 2000) nextErrors.note = 'Notes must be 2,000 characters or fewer.';
     if (closedDate) nextErrors.date = 'The studio is closed on this day. Choose another date.';
     if (businessSettings && !closedDate && slotsError) {
       nextErrors.submit = 'We could not verify availability. Please try changing the date and select a time again.';
     }
-    if (businessSettings && !closedDate && !slotsLoading && !slotsError
-      && (!timeSlots.includes(form.time) || bookedSlots.includes(form.time))) {
+    if (businessSettings && !closedDate && !slotsError
+      && (slotsLoading || !timeSlots.includes(form.time) || bookedSlots.includes(form.time))) {
       nextErrors.time = 'Choose an available time slot.';
     }
 
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length) return;
 
+    submissionLock.current = true;
     setSaving(true);
     try {
       await saveBooking(form);
       setDone(true);
       setForm(empty);
     } catch (error) {
-      setErrors({
+      setErrors((current) => ({
+        ...current,
         submit: error.code === '23505'
           ? 'That time slot was just booked. Please choose another time.'
           : error.message || 'We could not save your booking. Please try again.',
-      });
+      }));
     } finally {
+      submissionLock.current = false;
       setSaving(false);
     }
   };
-
-  const Field = ({ k, label, type = 'text', children }) => (
-    <label>
-      {label}
-      {children || <input type={type} value={form[k]} onChange={updateField(k)} />}
-      {errors[k] && <small>{errors[k]}</small>}
-    </label>
-  );
 
   return (
     <section id="booking" className="sec alt">
@@ -188,11 +244,11 @@ export default function Booking() {
         <h2>Ready for your next set?</h2>
 
         <form className="form" onSubmit={submit} noValidate>
-          <Field k="name" label="Name" />
-          <Field k="phone" label="Phone" type="tel" />
-          <Field k="email" label="Email" type="email" />
-          <Field k="date" label="Preferred date" type="date" />
-          <Field k="time" label="Preferred time">
+          <BookingField name="name" label="Name" value={form.name} onChange={updateField('name')} error={errors.name} autoComplete="name" />
+          <BookingField name="phone" label="Phone" type="tel" value={form.phone} onChange={updateField('phone')} error={errors.phone} autoComplete="tel" inputMode="numeric" />
+          <BookingField name="email" label="Email" type="email" value={form.email} onChange={updateField('email')} error={errors.email} autoComplete="email" />
+          <BookingField name="date" label="Preferred date" type="date" value={form.date} onChange={updateField('date')} error={errors.date} min={localDateValue()} />
+          <BookingField name="time" label="Preferred time" value={form.time} onChange={updateField('time')} error={errors.time}>
             {businessSettings ? (
               <select value={form.time} onChange={updateField('time')} disabled={!form.date || closedDate || slotsLoading || Boolean(slotsError)}>
                 <option value="">
@@ -203,13 +259,13 @@ export default function Booking() {
                 ))}
               </select>
             ) : <input type="time" value={form.time} onChange={updateField('time')} />}
-          </Field>
+          </BookingField>
           {settingsError && <p className="wide" role="status">Studio hours could not be loaded; you can still request a preferred time for manual confirmation.</p>}
           {businessSettings && form.date && closedDate && <p className="wide" role="status">The studio is closed on the selected day.</p>}
           {businessSettings && form.date && !closedDate && !slotsLoading && !slotsError && timeSlots.length === 0 && <p className="wide" role="alert">No appointment slots are configured for these business hours.</p>}
           {slotsError && <p className="wide" role="alert">We could not check booked times. Please choose another date or try again later.</p>}
 
-          <Field k="service" label="Service">
+          <BookingField name="service" label="Service" value={form.service} onChange={updateField('service')} error={errors.service}>
             <select value={form.service} onChange={updateField('service')} disabled={servicesLoading || services.length === 0}>
               <option value="">
                 {servicesLoading ? 'Loading services…' : services.length ? 'Select' : 'No services available'}
@@ -218,23 +274,31 @@ export default function Booking() {
                 <option key={service.id} value={service.id}>{service.name}</option>
               ))}
             </select>
-          </Field>
+          </BookingField>
 
-          <Field k="shape" label="Nail shape">
+          <BookingField name="shape" label="Nail shape" value={form.shape} onChange={updateField('shape')}>
             <select value={form.shape} onChange={updateField('shape')}>
               {['Almond', 'Coffin', 'Square', 'Oval', 'Stiletto'].map((option) => (
                 <option key={option}>{option}</option>
               ))}
             </select>
-          </Field>
+          </BookingField>
+
+          <BookingField name="design_id" label="Nail design (optional)" value={form.design_id} onChange={updateField('design_id')} error={errors.design}>
+            <select value={form.design_id} onChange={updateField('design_id')} disabled={designsLoading || designs.length === 0}>
+              <option value="">{designsLoading ? 'Loading designs…' : designs.length ? 'No specific design' : 'No designs available'}</option>
+              {designs.map((design) => <option key={design.id} value={design.id}>{design.name}</option>)}
+            </select>
+          </BookingField>
 
           <label className="wide">
             Special request
-            <textarea rows="3" value={form.note} onChange={updateField('note')} />
+            <textarea rows="3" value={form.note} onChange={updateField('note')} maxLength={2000} />
+            {errors.note && <small>{errors.note}</small>}
           </label>
 
           {errors.submit && <p className="admin-error wide" role="alert">{errors.submit}</p>}
-          <button className="btn full wide" disabled={saving || servicesLoading || services.length === 0 || settingsLoading || slotsLoading}>
+          <button className="btn full wide" disabled={saving || servicesLoading || services.length === 0 || settingsLoading || slotsLoading || Boolean(pendingDesignSelection)}>
             {saving ? 'Sending request…' : 'Book My Appointment'}
           </button>
         </form>

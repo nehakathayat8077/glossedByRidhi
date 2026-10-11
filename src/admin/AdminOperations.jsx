@@ -3,7 +3,7 @@ import { Eye, Pencil, Search, X } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import { supabase } from '../lib/supabaseClient';
 import { useAdminNotice } from './AdminLayout';
-import { loadActiveServices } from '../lib/catalogLoaders';
+import { loadActiveDesigns, loadActiveServices } from '../lib/catalogLoaders';
 
 const appointmentStatuses = ['pending', 'confirmed', 'completed', 'cancelled'];
 const orderStatuses = ['new', 'paid', 'shipped', 'delivered', 'cancelled'];
@@ -42,6 +42,7 @@ function Pagination({ page, setPage, count }) {
 
 function AppointmentEditor({ appointment, onClose, onSaved }) {
   const [services, setServices] = useState([]);
+  const [designs, setDesigns] = useState([]);
   const [form, setForm] = useState({
     name: appointment.name || '',
     phone: appointment.phone || '',
@@ -49,6 +50,9 @@ function AppointmentEditor({ appointment, onClose, onSaved }) {
     appointment_date: appointment.appointment_date || '',
     time_slot: appointment.time_slot?.slice(0, 5) || '',
     service_id: appointment.service_id || '',
+    design_id: appointment.design_id || '',
+    service_name: appointment.service_name || '',
+    design_title: appointment.design_title || '',
     notes: appointment.notes || '',
     status: appointment.status,
   });
@@ -56,7 +60,12 @@ function AppointmentEditor({ appointment, onClose, onSaved }) {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    loadActiveServices().then(setServices).catch((loadError) => setError(loadError.message));
+    Promise.all([loadActiveServices(), loadActiveDesigns()])
+      .then(([activeServices, activeDesigns]) => {
+        setServices(activeServices);
+        setDesigns(activeDesigns);
+      })
+      .catch((loadError) => setError(loadError.message));
   }, []);
 
   const update = (key) => (event) => setForm((current) => ({ ...current, [key]: event.target.value }));
@@ -65,17 +74,23 @@ function AppointmentEditor({ appointment, onClose, onSaved }) {
     event.preventDefault();
     setSaving(true);
     setError('');
-    const { error: saveError } = await supabase
-      .from('appointments')
-      .update({
-        ...form,
-        service_id: form.service_id || null,
-        notes: form.notes || null,
-      })
-      .eq('id', appointment.id);
-    if (saveError) setError(saveError.message);
-    else await onSaved();
-    setSaving(false);
+    try {
+      const { error: saveError } = await supabase
+        .from('appointments')
+        .update({
+          ...form,
+          service_id: form.service_id || null,
+          design_id: form.design_id || null,
+          notes: form.notes || null,
+        })
+        .eq('id', appointment.id);
+      if (saveError) setError(saveError.message);
+      else await onSaved();
+    } catch (saveError) {
+      setError(saveError.message || 'Could not update this appointment.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -86,7 +101,8 @@ function AppointmentEditor({ appointment, onClose, onSaved }) {
           <label className="admin-field">Customer name<input required value={form.name} onChange={update('name')} /></label>
           <label className="admin-field">Phone<input required value={form.phone} onChange={update('phone')} /></label>
           <label className="admin-field">Email<input required type="email" value={form.email} onChange={update('email')} /></label>
-          <label className="admin-field">Service<select required value={form.service_id} onChange={update('service_id')}><option value="">Choose a service</option>{form.service_id && !services.some((service) => service.id === form.service_id) && <option value={form.service_id}>{appointment.services?.name || 'Previously selected service (inactive)'}</option>}{services.map((service) => <option value={service.id} key={service.id}>{service.name}</option>)}</select></label>
+          <label className="admin-field">Service<select required value={form.service_id} onChange={update('service_id')}><option value="">Choose a service</option>{form.service_id && !services.some((service) => service.id === form.service_id) && <option value={form.service_id}>{form.service_name || 'Previously selected service (inactive)'}</option>}{services.map((service) => <option value={service.id} key={service.id}>{service.name}</option>)}</select></label>
+          <label className="admin-field">Nail design<select value={form.design_id || ''} onChange={update('design_id')}><option value="">No design selected</option>{form.design_id && !designs.some((design) => design.id === form.design_id) && <option value={form.design_id}>{form.design_title || 'Previously selected design (inactive)'}</option>}{designs.map((design) => <option value={design.id} key={design.id}>{design.name}</option>)}</select></label>
           <label className="admin-field">Appointment date<input required type="date" value={form.appointment_date} onChange={update('appointment_date')} /></label>
           <label className="admin-field">Time slot<input required type="time" value={form.time_slot} onChange={update('time_slot')} /></label>
           <label className="admin-field">Status<select value={form.status} onChange={update('status')}>{appointmentStatuses.map((status) => <option key={status}>{status}</option>)}</select></label>
@@ -99,11 +115,41 @@ function AppointmentEditor({ appointment, onClose, onSaved }) {
   );
 }
 
+function AppointmentDetails({ appointment, onClose, onEdit }) {
+  return (
+    <div className="admin-modal-backdrop" role="presentation" onMouseDown={(event) => {
+      if (event.target === event.currentTarget) onClose();
+    }}>
+      <section className="admin-modal" aria-labelledby="appointment-details-title">
+        <div className="admin-modal-heading">
+          <div><span className="admin-eyebrow">BOOKING DETAILS</span><h2 id="appointment-details-title">{appointment.name}</h2></div>
+          <button type="button" className="admin-icon-button" onClick={onClose} aria-label="Close"><X /></button>
+        </div>
+        <div className="admin-order-details">
+          <p><strong>Email</strong>{appointment.email}</p>
+          <p><strong>Phone</strong>{appointment.phone}</p>
+          <p><strong>Service</strong>{appointment.service_name || '—'}</p>
+          <p><strong>Nail design</strong>{appointment.design_title || '—'}</p>
+          <p><strong>Requested date</strong>{formatDate(appointment.appointment_date)}</p>
+          <p><strong>Requested time</strong>{appointment.time_slot}</p>
+          <p><strong>Status</strong><span className={`admin-badge status-${appointment.status}`}>{appointment.status}</span></p>
+          <p><strong>Booked</strong>{appointment.created_at ? new Date(appointment.created_at).toLocaleString() : '—'}</p>
+        </div>
+        <h3 className="admin-subheading">Customer notes</h3>
+        <p className="admin-note">{appointment.notes || 'No notes provided.'}</p>
+        <div className="admin-modal-actions">
+          <button type="button" className="admin-secondary-button" onClick={onClose}>Close</button>
+          <button type="button" className="btn" onClick={onEdit}>Edit appointment</button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
 function AppointmentManager() {
   const notify = useAdminNotice();
   const [searchParams] = useSearchParams();
   const [records, setRecords] = useState([]);
-  const [services, setServices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [query, setQuery] = useState('');
@@ -111,30 +157,49 @@ function AppointmentManager() {
   const [date, setDate] = useState('');
   const [page, setPage] = useState(0);
   const [editing, setEditing] = useState(null);
+  const [viewing, setViewing] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError('');
-    const { data, error: loadError } = await supabase
+    const { data: appointmentData, error: loadError } = await supabase
       .from('appointments')
-      .select('id, name, phone, email, service_id, appointment_date, time_slot, notes, status, created_at, services(name)')
+      .select('id, name, phone, email, service_id, design_id, appointment_date, time_slot, notes, status, created_at')
       .order('created_at', { ascending: false });
     if (loadError) {
       setError(loadError.message);
       setRecords([]);
-    } else setRecords(data || []);
+      setLoading(false);
+      return;
+    }
+
+    const serviceIds = [...new Set((appointmentData || []).map((record) => record.service_id).filter(Boolean))];
+    const designIds = [...new Set((appointmentData || []).map((record) => record.design_id).filter(Boolean))];
+    const [serviceResult, designResult] = await Promise.all([
+      serviceIds.length ? supabase.from('services').select('id, name').in('id', serviceIds) : { data: [], error: null },
+      designIds.length ? supabase.from('designs').select('id, title').in('id', designIds) : { data: [], error: null },
+    ]);
+    if (serviceResult.error || designResult.error) {
+      setError(serviceResult.error?.message || designResult.error?.message);
+      setRecords([]);
+    } else {
+      const servicesById = new Map((serviceResult.data || []).map((service) => [service.id, service.name]));
+      const designsById = new Map((designResult.data || []).map((design) => [design.id, design.title]));
+      setRecords((appointmentData || []).map((record) => ({
+        ...record,
+        service_name: servicesById.get(record.service_id) || '',
+        design_title: designsById.get(record.design_id) || '',
+      })));
+    }
     setLoading(false);
   }, []);
 
-  useEffect(() => {
-    load();
-    loadActiveServices().then(setServices).catch((serviceError) => console.error('Could not load appointment services.', serviceError));
-  }, [load]);
+  useEffect(() => { load(); }, [load]);
 
   const filtered = useMemo(() => {
     const term = query.trim().toLowerCase();
     return records.filter((record) =>
-      (!term || [record.name, record.email, record.appointment_date, record.services?.name].some((value) => String(value || '').toLowerCase().includes(term)))
+      (!term || [record.name, record.email, record.phone, record.appointment_date, record.service_name, record.design_title].some((value) => String(value || '').toLowerCase().includes(term)))
       && (status === 'all' || record.status === status)
       && (!date || record.appointment_date === date),
     );
@@ -158,20 +223,21 @@ function AppointmentManager() {
   return (
     <section className="admin-page">
       <div className="admin-page-intro"><div><span className="admin-eyebrow">CUSTOMER BOOKINGS</span><h2>Appointments</h2></div><span className="admin-record-count">{records.length} total</span></div>
-      <OperationsToolbar query={query} setQuery={(value) => { setQuery(value); setPage(0); }} status={status} setStatus={(value) => { setStatus(value); setPage(0); }} statuses={appointmentStatuses} date={date} setDate={(value) => { setDate(value); setPage(0); }} searchPlaceholder="Search name, email, date or service" />
+      <OperationsToolbar query={query} setQuery={(value) => { setQuery(value); setPage(0); }} status={status} setStatus={(value) => { setStatus(value); setPage(0); }} statuses={appointmentStatuses} date={date} setDate={(value) => { setDate(value); setPage(0); }} searchPlaceholder="Search name, email, phone, date, service or design" />
       {error && <div className="admin-alert" role="alert">{error}</div>}
       <div className="admin-panel admin-table-panel">
         {loading ? <p className="admin-state">Loading appointments…</p> : filtered.length === 0 ? <p className="admin-empty">No appointments match these filters.</p> : (
           <div className="admin-table-scroll"><table className="admin-table">
-            <thead><tr><th>Customer</th><th>Service</th><th>Date & time</th><th>Contact</th><th>Status</th><th>Actions</th></tr></thead>
+            <thead><tr><th>Customer</th><th>Service / design</th><th>Date & time</th><th>Contact</th><th>Status</th><th>Actions</th></tr></thead>
             <tbody>{filtered.slice(page * pageSize, (page + 1) * pageSize).map((record) => (
               <tr key={record.id}>
                 <td><strong>{record.name}</strong><small>Created {formatDate(record.created_at)}</small></td>
-                <td>{record.services?.name || '—'}</td>
+                <td>{record.service_name || '—'}<small>{record.design_title || 'No design selected'}</small></td>
                 <td>{formatDate(record.appointment_date)}<small>{record.time_slot}</small></td>
                 <td>{record.phone}<small>{record.email}</small></td>
                 <td><span className={`admin-badge status-${record.status}`}>{record.status}</span></td>
                 <td><div className="admin-row-actions">
+                  <button className="admin-icon-button" title="View appointment details" onClick={() => setViewing(record)}><Eye size={16} /></button>
                   <button className="admin-icon-button" title="Edit details" onClick={() => setEditing(record)}><Pencil size={16} /></button>
                   <select className="admin-inline-status" aria-label="Appointment status" value={record.status} onChange={(event) => updateStatus(record, event.target.value)}>{appointmentStatuses.map((value) => <option key={value}>{value}</option>)}</select>
                 </div></td>
@@ -181,6 +247,7 @@ function AppointmentManager() {
         )}
         {!loading && <Pagination page={page} setPage={setPage} count={filtered.length} />}
       </div>
+      {viewing && <AppointmentDetails appointment={viewing} onClose={() => setViewing(null)} onEdit={() => { setEditing(viewing); setViewing(null); }} />}
       {editing && <AppointmentEditor appointment={editing} onClose={() => setEditing(null)} onSaved={saveEdit} />}
     </section>
   );
