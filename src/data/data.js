@@ -1,44 +1,41 @@
-// Placeholder images: replace the `img` values with your own photos (or Unsplash URLs).
-const img = (seed) => `https://picsum.photos/seed/${seed}/600/700`;
-
 // Service details power both the services grid and appointment form.
 export const services = [
   {
     name: 'Classic Manicure',
     price: 499,
     text: 'Shape, cuticle care and a flawless polish finish.',
-    img: img('mani'),
+    image_url: '/images/designs/design-01.jpg',
   },
   {
     name: 'Gel Nails',
     price: 799,
     text: 'Glossy colour that stays chip-free for weeks.',
-    img: img('gel'),
+    image_url: '/images/designs/design-01.jpg',
   },
   {
     name: 'Nail Extensions',
     price: 1299,
     text: 'Sculpted length in the shape you love.',
-    img: img('ext'),
+    image_url: '/images/designs/design-01.jpg',
   },
   {
     name: 'Custom Nail Art',
     price: 999,
     plus: true,
     text: 'Hand-painted designs made from your idea.',
-    img: img('art'),
+    image_url: '/images/designs/design-01.jpg',
   },
   {
     name: 'French Tips',
     price: 699,
     text: 'The timeless white edge, done with precision.',
-    img: img('french'),
+    image_url: '/images/designs/design-01.jpg',
   },
   {
     name: 'Chrome / Glazed',
     price: 899,
     text: 'Mirror shine with a soft pearl glow.',
-    img: img('chrome'),
+    image_url: '/images/designs/design-01.jpg',
   },
 ];
 
@@ -60,21 +57,21 @@ export const designs = [
     name: 'Blush Milk Bath',
     cat: 'Minimal',
     price: 899,
-    img: '/images/designs/design-01.jpg',
+    image_url: '/images/designs/design-01.jpg',
   },
   {
     id: 'd2',
     name: 'Champagne French',
     cat: 'French',
     price: 999,
-    img: '/images/designs/design-07.jpg',
+    image_url: '/images/designs/design-07.jpg',
   },
   {
     id: 'd3',
     name: 'Rose Chrome',
     cat: 'Chrome',
     price: 1099,
-    img: '/images/designs/design-03.jpg',
+    image_url: '/images/designs/design-03.jpg',
     text: 'Mirror rose chrome over a sheer pink base.',
   },
   {
@@ -82,7 +79,7 @@ export const designs = [
     name: 'Wild Peony',
     cat: 'Floral',
     price: 1199,
-    img: '/images/designs/design-04.jpg',
+    image_url: '/images/designs/design-04.jpg',
     text: 'Hand-painted peonies in burgundy and blush.',
   },
   {
@@ -90,7 +87,7 @@ export const designs = [
     name: 'Veil & Pearl',
     cat: 'Bridal',
     price: 1499,
-    img: '/images/designs/design-08.jpg',
+    image_url: '/images/designs/design-08.jpg',
     text: 'Soft ivory with pearls and fine lace detail.',
   },
   {
@@ -98,7 +95,7 @@ export const designs = [
     name: 'Midnight Sparkle',
     cat: 'Party',
     price: 1299,
-    img: '/images/designs/design-06.jpg',  
+    image_url: '/images/designs/design-06.jpg',
     text: 'Deep wine base with scattered glitter.',
   },
   {
@@ -106,7 +103,7 @@ export const designs = [
     name: 'Strawberry Milk',
     cat: 'Cute',
     price: 999,
-    img: '/images/designs/design-02.jpg',  
+    image_url: '/images/designs/design-02.jpg',
     text: 'Tiny hearts and cherries on pastel pink.',
   },
   {
@@ -114,7 +111,7 @@ export const designs = [
     name: 'Nude Lines',
     cat: 'Minimal',
     price: 849,
-    img: '/images/designs/design-05.jpg',  
+    image_url: '/images/designs/design-05.jpg',
     text: 'Fine gold lines across a neutral nude.',
   },
 ];
@@ -126,14 +123,14 @@ export const products = [
     price: 699,
     old: 899,
     rating: 4.8,
-    img: img('p1'),
+    image_url: '/images/products/product-press-on-nails.jpg',
   },
   {
     id: 'p2',
     name: 'Nail Art Stickers',
     price: 249,
     rating: 4.6,
-    img: img('p2'),
+    image_url: '/images/products/product-nail-stickers.jpg',
   },
   {
     id: 'p3',
@@ -141,14 +138,14 @@ export const products = [
     price: 599,
     old: 749,
     rating: 4.7,
-    img: img('p3'),
+    image_url: '/images/products/product-nail-kit.jpg',
   },
   {
     id: 'p4',
     name: 'Cuticle Oil',
     price: 299,
     rating: 4.9,
-    img: img('p4'),
+    image_url: '/images/products/product-cuticle-oil.jpg',
   },
   {
     id: 'p5',
@@ -156,7 +153,7 @@ export const products = [
     price: 349,
     old: 399,
     rating: 4.5,
-    img: img('p5'),
+    image_url: '/images/products/product-nail-file.jpg',
   },
   {
     id: 'p6',
@@ -164,7 +161,7 @@ export const products = [
     price: 1299,
     old: 1599,
     rating: 4.9,
-    img: img('p6'),
+    image_url: '/images/products/product-gift-box.jpg',
   },
 ];
 

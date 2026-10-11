@@ -1,5 +1,7 @@
 import { motion } from 'framer-motion';
-import heroNails from '../assets/hero-nails.png';
+import ResilientImage from './ResilientImage';
+import { storageImageUrl } from '../lib/storage';
+
 export default function Hero() {
   const go = (id) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' });
 
@@ -34,12 +36,16 @@ export default function Hero() {
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.8, delay: 0.2 }}
         >
-          <motion.img
-            animate={{ y: [0, -10, 0] }}
-            transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut' }}
-            src={heroNails}
+          <ResilientImage
+            src={`${storageImageUrl('hero-nails.jpg')}?v=2`}
+            fallbackSrc="/images/designs/design-01.jpg"
             alt="Hand with blush nail art"
+            motionProps={{
+              animate: { y: [0, -10, 0] },
+              transition: { duration: 5, repeat: Infinity, ease: 'easeInOut' },
+            }}
           />
+
           <span className="spark s1">✦</span>
           <span className="spark s2">✧</span>
           <span className="blob" />

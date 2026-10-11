@@ -1,16 +1,30 @@
 import { motion } from 'framer-motion';
-import { services } from '../data/data';
+import { useCatalogData } from '../hooks/useCatalogData';
+import { loadActiveServices } from '../lib/catalogLoaders';
+import ResilientImage from './ResilientImage';
+
+const noFallbackServices = [];
 
 export default function Services() {
+  const { items: services, loading } = useCatalogData(
+    loadActiveServices,
+    noFallbackServices,
+    'services',
+  );
+
   return (
     <section id="services" className="sec">
       <div className="wrap">
         <h2>Services made for your hands</h2>
 
         <div className="grid g3">
-          {services.map((service, index) => (
+          {loading ? (
+            <p className="muted" role="status">Loading services…</p>
+          ) : services.length === 0 ? (
+            <p className="muted">No services are currently available.</p>
+          ) : services.map((service, index) => (
             <motion.article
-              key={service.name}
+              key={service.id}
               className="card"
               initial={{ opacity: 0, y: 24 }}
               whileInView={{ opacity: 1, y: 0 }}
@@ -18,17 +32,23 @@ export default function Services() {
               transition={{ duration: 0.5, delay: index * 0.07 }}
             >
               <div className="ph">
-                <img loading="lazy" src={service.img} alt={service.name} />
+                {service.image_url && (
+                  <ResilientImage
+                    loading="lazy"
+                    src={service.image_url}
+                    fallbackToBundled={false}
+                    alt={service.name}
+                  />
+                )}
               </div>
 
               <div className="cb">
                 <h3>{service.name}</h3>
-                <p>{service.text}</p>
+                {service.description && <p>{service.description}</p>}
 
                 <div className="row sb">
                   <strong>
                     ₹{service.price.toLocaleString('en-IN')}
-                    {service.plus && '+'}
                   </strong>
 
                   <button

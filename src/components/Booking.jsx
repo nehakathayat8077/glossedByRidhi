@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { AnimatePresence } from 'framer-motion';
-import { services } from '../data/data';
 import { Modal } from './NailDesigns';
+import { loadActiveServices } from '../lib/catalogLoaders';
+import { useCatalogData } from '../hooks/useCatalogData';
 
 // Swap this function for a Supabase/Firebase/API call later.
 export async function saveBooking(booking) {
@@ -21,10 +22,17 @@ const empty = {
   note: '',
 };
 
+const noFallbackServices = [];
+
 export default function Booking() {
   const [form, setForm] = useState(empty);
   const [errors, setErrors] = useState({});
   const [done, setDone] = useState(false);
+  const { items: services, loading: servicesLoading } = useCatalogData(
+    loadActiveServices,
+    noFallbackServices,
+    'booking services',
+  );
 
   const updateField = (key) => (event) => setForm({ ...form, [key]: event.target.value });
 
@@ -68,10 +76,12 @@ export default function Booking() {
           <Field k="time" label="Preferred time" type="time" />
 
           <Field k="service" label="Service">
-            <select value={form.service} onChange={updateField('service')}>
-              <option value="">Select</option>
+            <select value={form.service} onChange={updateField('service')} disabled={servicesLoading || services.length === 0}>
+              <option value="">
+                {servicesLoading ? 'Loading services…' : services.length ? 'Select' : 'No services available'}
+              </option>
               {services.map((service) => (
-                <option key={service.name}>{service.name}</option>
+                <option key={service.id}>{service.name}</option>
               ))}
             </select>
           </Field>

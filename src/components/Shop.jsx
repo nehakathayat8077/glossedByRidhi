@@ -2,12 +2,16 @@ import { useState } from 'react';
 import { Heart, Star } from 'lucide-react';
 import { products } from '../data/data';
 import { useCart } from '../context/CartContext';
+import { useCatalogData } from '../hooks/useCatalogData';
+import { loadActiveProducts } from '../lib/catalogLoaders';
+import ResilientImage from './ResilientImage';
 
 export default function Shop() {
   const [query, setQuery] = useState('');
   const { add, wish, toggleWish } = useCart();
+  const { items, loading } = useCatalogData(loadActiveProducts, products, 'products');
 
-  const list = products.filter((product) => product.name.toLowerCase().includes(query.toLowerCase()));
+  const list = items.filter((product) => product.name.toLowerCase().includes(query.toLowerCase()));
 
   return (
     <section id="shop" className="sec">
@@ -21,14 +25,21 @@ export default function Shop() {
           onChange={(event) => setQuery(event.target.value)}
         />
 
-        {list.length === 0 ? (
+        {loading ? (
+          <p className="muted" role="status">Loading products…</p>
+        ) : list.length === 0 ? (
           <p className="muted">No products match “{query}”. Try a shorter search.</p>
         ) : (
           <div className="grid g3">
             {list.map((product) => (
               <article key={product.id} className="card">
                 <div className="ph">
-                  <img loading="lazy" src={product.img} alt={product.name} />
+                  <ResilientImage
+                    loading="lazy"
+                    src={product.image_url}
+                    fallbackSrc={product.fallback_image_url}
+                    alt={product.name}
+                  />
                   {product.old && <span className="tag">{Math.round((1 - product.price / product.old) * 100)}% off</span>}
                   <button
                     className={'heart' + (wish.includes(product.id) ? ' on' : '')}
@@ -41,9 +52,11 @@ export default function Shop() {
 
                 <div className="cb">
                   <h3>{product.name}</h3>
-                  <p className="muted">
-                    <Star size={14} fill="currentColor" /> {product.rating}
-                  </p>
+                  {product.rating != null && (
+                    <p className="muted">
+                      <Star size={14} fill="currentColor" /> {product.rating}
+                    </p>
+                  )}
 
                   <div className="row sb">
                     <span>

@@ -1,6 +1,7 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Minus, Plus, Trash2 } from 'lucide-react';
 import { useCart } from '../context/CartContext';
+import ResilientImage from './ResilientImage';
 
 export default function CartDrawer() {
   const { open, setOpen, items, qty, remove, subtotal, say } = useCart();
@@ -35,7 +36,7 @@ export default function CartDrawer() {
               <div className="lines">
                 {items.map((item) => (
                   <div key={item.id} className="line">
-                    <img src={item.img} alt="" />
+                    <ResilientImage src={item.image_url || item.img} alt="" />
 
                     <div>
                       <b>{item.name}</b>

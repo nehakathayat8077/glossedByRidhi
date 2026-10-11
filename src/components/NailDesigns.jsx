@@ -3,13 +3,17 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Heart, X } from 'lucide-react';
 import { designs, cats } from '../data/data';
 import { useCart } from '../context/CartContext';
+import { useCatalogData } from '../hooks/useCatalogData';
+import { loadActiveDesigns } from '../lib/catalogLoaders';
+import ResilientImage from './ResilientImage';
 
 export default function NailDesigns() {
   const [category, setCategory] = useState('All');
   const [selected, setSelected] = useState(null);
   const { wish, toggleWish } = useCart();
+  const { items, loading } = useCatalogData(loadActiveDesigns, designs, 'nail designs');
 
-  const list = designs.filter((design) => category === 'All' || design.cat === category);
+  const list = items.filter((design) => category === 'All' || design.cat === category);
 
   return (
     <section id="designs" className=" sec alt">
@@ -26,10 +30,17 @@ export default function NailDesigns() {
 
         <motion.div layout className="grid g4">
           <AnimatePresence>
-            {list.map((design) => (
+            {loading ? (
+              <p className="muted" role="status">Loading nail designs…</p>
+            ) : list.map((design) => (
               <motion.article layout key={design.id} className="card" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
                 <div className="ph tall">
-                  <img loading="lazy" src={design.img} alt={design.name} />
+                  <ResilientImage
+                    loading="lazy"
+                    src={design.image_url}
+                    fallbackSrc={design.fallback_image_url}
+                    alt={design.name}
+                  />
                   <button
                     className={'heart' + (wish.includes(design.id) ? ' on' : '')}
                     onClick={() => toggleWish(design.id)}
@@ -42,7 +53,7 @@ export default function NailDesigns() {
                 <div className="cb">
                   <h3>{design.name}</h3>
                   <p className="muted">
-                    {design.cat} · ₹{design.price}
+                    {design.cat}{design.price != null ? ` · ₹${design.price}` : ''}
                   </p>
                   <button className="link" onClick={() => setSelected(design)}>
                     View Design
@@ -58,14 +69,20 @@ export default function NailDesigns() {
         {selected && (
           <Modal onClose={() => setSelected(null)}>
             <div className="split">
-              <img src={selected.img} alt={selected.name} />
+              <ResilientImage
+                src={selected.image_url}
+                fallbackSrc={selected.fallback_image_url}
+                alt={selected.name}
+              />
 
               <div>
                 <h3>{selected.name}</h3>
-                <p>{selected.text}</p>
-                <p>
-                  <strong>₹{selected.price}</strong>
-                </p>
+                {selected.text && <p>{selected.text}</p>}
+                {selected.price != null && (
+                  <p>
+                    <strong>₹{selected.price}</strong>
+                  </p>
+                )}
                 <p className="muted">Colours: Blush, Nude, Wine · Shapes: Almond, Coffin, Square</p>
                 <button
                   className="btn"
