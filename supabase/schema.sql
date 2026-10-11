@@ -92,11 +92,26 @@ alter table public.business_settings enable row level security;
 
 grant usage on schema public to anon, authenticated;
 grant select on public.services, public.designs, public.products, public.business_settings to anon;
-grant insert on public.appointments, public.orders, public.newsletter_subscribers to anon;
+grant insert (name, phone, email, service_id, appointment_date, time_slot, notes)
+  on public.appointments to anon;
+grant insert (email) on public.newsletter_subscribers to anon;
 grant select, insert, update, delete
   on public.services, public.designs, public.products, public.appointments,
      public.orders, public.newsletter_subscribers, public.business_settings
   to authenticated;
+
+create or replace function public.is_admin()
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select coalesce(auth.jwt() -> 'app_metadata' ->> 'role' = 'admin', false);
+$$;
+
+revoke all on function public.is_admin() from public;
+grant execute on function public.is_admin() to authenticated;
 
 create policy "Public can read active services"
   on public.services for select to anon using (is_active);
@@ -105,35 +120,33 @@ create policy "Public can read active designs"
 create policy "Public can read active products"
   on public.products for select to anon using (is_active);
 create policy "Public can request appointments"
-  on public.appointments for insert to anon with check (true);
-create policy "Public can submit orders"
-  on public.orders for insert to anon with check (true);
+  on public.appointments for insert to anon with check (status = 'pending');
 create policy "Public can subscribe to newsletter"
   on public.newsletter_subscribers for insert to anon with check (true);
 create policy "Public can read business settings"
   on public.business_settings for select to anon using (true);
 
-create policy "Authenticated users can manage services"
-  on public.services for all to authenticated using (true) with check (true);
-create policy "Authenticated users can manage designs"
-  on public.designs for all to authenticated using (true) with check (true);
-create policy "Authenticated users can manage products"
-  on public.products for all to authenticated using (true) with check (true);
-create policy "Authenticated users can manage appointments"
-  on public.appointments for all to authenticated using (true) with check (true);
-create policy "Authenticated users can manage orders"
-  on public.orders for all to authenticated using (true) with check (true);
-create policy "Authenticated users can manage subscribers"
-  on public.newsletter_subscribers for all to authenticated using (true) with check (true);
-create policy "Authenticated users can manage business settings"
-  on public.business_settings for all to authenticated using (true) with check (true);
+create policy "Admins can manage services"
+  on public.services for all to authenticated using (public.is_admin()) with check (public.is_admin());
+create policy "Admins can manage designs"
+  on public.designs for all to authenticated using (public.is_admin()) with check (public.is_admin());
+create policy "Admins can manage products"
+  on public.products for all to authenticated using (public.is_admin()) with check (public.is_admin());
+create policy "Admins can manage appointments"
+  on public.appointments for all to authenticated using (public.is_admin()) with check (public.is_admin());
+create policy "Admins can manage orders"
+  on public.orders for all to authenticated using (public.is_admin()) with check (public.is_admin());
+create policy "Admins can manage subscribers"
+  on public.newsletter_subscribers for all to authenticated using (public.is_admin()) with check (public.is_admin());
+create policy "Admins can manage business settings"
+  on public.business_settings for all to authenticated using (public.is_admin()) with check (public.is_admin());
 
 create or replace function public.get_booked_slots(p_date date)
 returns table (time_slot time)
 language sql
 stable
 security definer
-set search_path = public
+set search_path = ''
 as $$
   select a.time_slot
   from public.appointments as a
@@ -177,7 +190,7 @@ on conflict (id) do update set public = excluded.public;
 create policy "Public can read images"
   on storage.objects for select to anon, authenticated
   using (bucket_id = 'images');
-create policy "Authenticated users can manage images"
+create policy "Admins can manage images"
   on storage.objects for all to authenticated
-  using (bucket_id = 'images')
-  with check (bucket_id = 'images');
+  using (bucket_id = 'images' and public.is_admin())
+  with check (bucket_id = 'images' and public.is_admin());

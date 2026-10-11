@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react';
 import Navbar from './components/Navbar';
 import Hero from './components/Hero';
 import Services from './components/Services';
@@ -7,8 +8,11 @@ import Booking from './components/Booking';
 import FAQ from './components/FAQ';
 import Footer from './components/Footer';
 import CartDrawer from './components/CartDrawer';
+import { Route, Routes } from 'react-router-dom';
 
-export default function App() {
+const AdminApp = lazy(() => import('./admin/AdminApp'));
+
+function CustomerWebsite() {
   return (
     <>
       <Navbar />
@@ -37,5 +41,14 @@ export default function App() {
       <Footer />
       <CartDrawer />
     </>
+  );
+}
+
+export default function App() {
+  return (
+    <Routes>
+      <Route path="/admin/*" element={<Suspense fallback={<div className="admin-state">Loading admin dashboard…</div>}><AdminApp /></Suspense>} />
+      <Route path="*" element={<CustomerWebsite />} />
+    </Routes>
   );
 }

@@ -10,6 +10,10 @@ const fallbackProductsByName = new Map(
 
 let activeServicesRequest;
 
+export function invalidateCatalogCache() {
+  activeServicesRequest = undefined;
+}
+
 export async function fetchActiveServices() {
   if (!activeServicesRequest) {
     activeServicesRequest = supabase

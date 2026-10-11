@@ -1,11 +1,36 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Minus, Plus, Trash2 } from 'lucide-react';
+import { useState } from 'react';
 import { useCart } from '../context/CartContext';
 import ResilientImage from './ResilientImage';
+import { submitOrder } from '../lib/orders';
 
 export default function CartDrawer() {
-  const { open, setOpen, items, qty, remove, subtotal, say } = useCart();
+  const { open, setOpen, items, qty, remove, clear, subtotal, say } = useCart();
+  const [checkoutOpen, setCheckoutOpen] = useState(false);
+  const [customer, setCustomer] = useState({ customerName: '', phone: '', address: '' });
+  const [checkoutError, setCheckoutError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [placedTotal, setPlacedTotal] = useState(null);
   const ship = subtotal > 999 || !items.length ? 0 : 60;
+
+  const placeOrder = async (event) => {
+    event.preventDefault();
+    setSubmitting(true);
+    setCheckoutError('');
+    try {
+      const order = await submitOrder({ ...customer, items });
+      setPlacedTotal(Number(order.order_total));
+      clear();
+      setCheckoutOpen(false);
+      setCustomer({ customerName: '', phone: '', address: '' });
+      say(`Order request received. Total: ₹${Number(order.order_total).toLocaleString('en-IN')}`);
+    } catch (error) {
+      setCheckoutError(error.message || 'Could not submit your order. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   return (
     <AnimatePresence>
@@ -26,6 +51,13 @@ export default function CartDrawer() {
                 <X />
               </button>
             </div>
+
+            {placedTotal != null && (
+              <div className="admin-success checkout-success" role="status">
+                Your order request was saved for ₹{placedTotal.toLocaleString('en-IN')}. Payment is not collected on this website.
+                <button onClick={() => setPlacedTotal(null)} aria-label="Dismiss confirmation"><X size={15} /></button>
+              </div>
+            )}
 
             {!items.length ? (
               <div className="empty">
@@ -61,6 +93,17 @@ export default function CartDrawer() {
               </div>
             )}
 
+            {items.length > 0 && checkoutOpen && (
+              <form className="checkout-form" onSubmit={placeOrder}>
+                <h4>Delivery details</h4>
+                <label>Name<input required minLength="2" value={customer.customerName} onChange={(event) => setCustomer({ ...customer, customerName: event.target.value })} /></label>
+                <label>Phone<input required minLength="7" value={customer.phone} onChange={(event) => setCustomer({ ...customer, phone: event.target.value })} /></label>
+                <label>Delivery address<textarea required minLength="5" rows="2" value={customer.address} onChange={(event) => setCustomer({ ...customer, address: event.target.value })} /></label>
+                {checkoutError && <p className="admin-error" role="alert">{checkoutError}</p>}
+                <button className="btn full" disabled={submitting}>{submitting ? 'Submitting order…' : 'Place order request'}</button>
+              </form>
+            )}
+
             <div className="sum">
               <p className="row sb">
                 <span>Subtotal</span>₹{subtotal}
@@ -74,13 +117,7 @@ export default function CartDrawer() {
                 <b>₹{subtotal + ship}</b>
               </p>
 
-              <button
-                className="btn full"
-                disabled={!items.length}
-                onClick={() => say('Checkout is a placeholder: connect your payment gateway here')}
-              >
-                Checkout
-              </button>
+              {!checkoutOpen && <button className="btn full" disabled={!items.length} onClick={() => setCheckoutOpen(true)}>Continue to checkout</button>}
             </div>
           </motion.aside>
         </>

@@ -7,9 +7,9 @@ export function useCatalogData(fetchData, fallbackData, catalogName) {
   useEffect(() => {
     let current = true;
 
-    fetchData()
+    const refresh = () => fetchData()
       .then((records) => {
-        if (current) setItems(records.length ? records : fallbackData);
+        if (current) setItems(records);
       })
       .catch((error) => {
         console.error(`Unable to load ${catalogName} from Supabase.`, error);
@@ -19,8 +19,19 @@ export function useCatalogData(fetchData, fallbackData, catalogName) {
         if (current) setLoading(false);
       });
 
+    const handleCatalogChange = () => {
+      if (current) {
+        setLoading(true);
+        refresh();
+      }
+    };
+
+    window.addEventListener('admin:catalog-changed', handleCatalogChange);
+    refresh();
+
     return () => {
       current = false;
+      window.removeEventListener('admin:catalog-changed', handleCatalogChange);
     };
   }, [fetchData, fallbackData, catalogName]);
 

@@ -58,6 +58,8 @@ export function CartProvider({ children }) {
     setItems((currentItems) => currentItems.filter((item) => item.id !== id));
   };
 
+  const clear = () => setItems([]);
+
   const toggleWish = (id) => {
     setWish((currentWish) =>
       currentWish.includes(id)
@@ -79,6 +81,7 @@ export function CartProvider({ children }) {
         add,
         qty,
         remove,
+        clear,
         wish,
         toggleWish,
         open,
