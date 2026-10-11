@@ -1,7 +1,9 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Minus, Plus, Trash2 } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useCart } from '../context/CartContext';
+import { useAuth } from '../context/AuthContext';
 import ResilientImage from './ResilientImage';
 import { submitOrder } from '../lib/orders';
 
@@ -10,12 +12,16 @@ const whatsappDigits = String(whatsappNumber || '').replace(/\D/g, '');
 
 export default function CartDrawer() {
   const { open, setOpen, items, qty, remove, clear, subtotal, say } = useCart();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { session, pendingAction, requestAuthentication, consumePendingAction } = useAuth();
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [customer, setCustomer] = useState({ customerName: '', phone: '', address: '' });
   const [checkoutError, setCheckoutError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState('cod');
   const [placedOrder, setPlacedOrder] = useState(null);
+  const submissionLock = useRef(false);
   const ship = subtotal > 999 || !items.length ? 0 : 60;
   const whatsappLink = placedOrder?.paymentMethod === 'qr_whatsapp' && whatsappDigits
     ? `https://wa.me/${whatsappDigits}?text=${encodeURIComponent(
@@ -23,8 +29,37 @@ export default function CartDrawer() {
     )}`
     : '';
 
-  const placeOrder = async (event) => {
-    event.preventDefault();
+  useEffect(() => {
+    if (!session?.user) return;
+    setCustomer((current) => ({
+      ...current,
+      customerName: current.customerName || session.user.user_metadata?.full_name || '',
+    }));
+  }, [session]);
+
+  const validateCustomer = () => {
+    if (customer.customerName.trim().length < 2) {
+      setCheckoutError('Enter your name to continue.');
+      return false;
+    }
+    if (customer.phone.replace(/\D/g, '').length < 7) {
+      setCheckoutError('Enter a valid phone number.');
+      return false;
+    }
+    if (customer.address.trim().length < 5) {
+      setCheckoutError('Enter a delivery address of at least 5 characters.');
+      return false;
+    }
+    if (!items.length) {
+      setCheckoutError('Your cart is empty.');
+      return false;
+    }
+    return true;
+  };
+
+  const placeOrder = async () => {
+    if (submissionLock.current || !session?.user) return;
+    submissionLock.current = true;
     setSubmitting(true);
     setCheckoutError('');
     try {
@@ -38,13 +73,71 @@ export default function CartDrawer() {
       setCheckoutOpen(false);
       setCustomer({ customerName: '', phone: '', address: '' });
       setPaymentMethod('cod');
+      try {
+        sessionStorage.removeItem('glossedByRidhi-checkout-draft');
+      } catch (storageError) {
+        console.error('Could not clear the saved checkout details.', storageError);
+      }
       say(`Order request received. Total: ₹${Number(order.order_total).toLocaleString('en-IN')}`);
     } catch (error) {
       setCheckoutError(error.message || 'Could not submit your order. Please try again.');
     } finally {
+      submissionLock.current = false;
       setSubmitting(false);
     }
   };
+
+  const submitCheckout = async (event) => {
+    event.preventDefault();
+    if (submissionLock.current) return;
+    if (!validateCustomer()) return;
+    if (!session?.user) {
+      requestAuthentication('order');
+      navigate('/login', { state: { from: `${location.pathname}${location.search}` } });
+      return;
+    }
+    await placeOrder();
+  };
+
+  useEffect(() => {
+    if (!session?.user || pendingAction !== 'order' || !checkoutOpen || !items.length || submissionLock.current) return;
+    if (consumePendingAction('order') && validateCustomer()) void placeOrder();
+  }, [session, pendingAction, checkoutOpen, items, consumePendingAction]);
+
+  useEffect(() => {
+    if (checkoutOpen) {
+      try {
+        sessionStorage.setItem('glossedByRidhi-checkout-draft', JSON.stringify({ customer, paymentMethod }));
+      } catch (storageError) {
+        setCheckoutError(`Could not preserve your checkout details: ${storageError.message}`);
+      }
+    }
+  }, [checkoutOpen, customer, paymentMethod]);
+
+  useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem('glossedByRidhi-checkout-draft');
+      if (!saved) return;
+      const draft = JSON.parse(saved);
+      if (draft.customer && typeof draft.customer === 'object') {
+        setCustomer({
+          customerName: typeof draft.customer.customerName === 'string' ? draft.customer.customerName : '',
+          phone: typeof draft.customer.phone === 'string' ? draft.customer.phone : '',
+          address: typeof draft.customer.address === 'string' ? draft.customer.address : '',
+        });
+        setCheckoutOpen(true);
+        setOpen(true);
+      }
+      if (draft.paymentMethod === 'cod' || draft.paymentMethod === 'qr_whatsapp') setPaymentMethod(draft.paymentMethod);
+    } catch (error) {
+      try {
+        sessionStorage.removeItem('glossedByRidhi-checkout-draft');
+      } catch (storageError) {
+        console.error('Could not remove invalid saved checkout details.', storageError);
+      }
+      setCheckoutError(`Saved checkout details could not be restored: ${error.message}`);
+    }
+  }, []);
 
   return (
     <AnimatePresence>
@@ -115,7 +208,7 @@ export default function CartDrawer() {
             )}
 
             {items.length > 0 && checkoutOpen && (
-              <form className="checkout-form" onSubmit={placeOrder}>
+              <form className="checkout-form" onSubmit={submitCheckout}>
                 <h4>Delivery details</h4>
                 <label>Name<input required minLength="2" value={customer.customerName} onChange={(event) => setCustomer({ ...customer, customerName: event.target.value })} /></label>
                 <label>Phone<input required minLength="7" value={customer.phone} onChange={(event) => setCustomer({ ...customer, phone: event.target.value })} /></label>

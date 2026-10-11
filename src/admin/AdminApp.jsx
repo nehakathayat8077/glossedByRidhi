@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, Navigate, Route, Routes, useLocation } from 'react-router-dom';
-import { AuthProvider, useAuth } from '../context/AuthContext';
+import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabaseClient';
 import AdminLayout from './AdminLayout';
 
@@ -108,9 +108,5 @@ function AdminGate() {
 }
 
 export default function AdminApp() {
-  return (
-    <AuthProvider>
-      <AdminGate />
-    </AuthProvider>
-  );
+  return <AdminGate />;
 }

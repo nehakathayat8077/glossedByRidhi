@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence } from 'framer-motion';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Modal } from './NailDesigns';
 import { loadActiveDesigns, loadActiveServices } from '../lib/catalogLoaders';
 import { useCatalogData } from '../hooks/useCatalogData';
 import { supabase } from '../lib/supabaseClient';
+import { useAuth } from '../context/AuthContext';
 
 export async function saveBooking(booking) {
   const notes = [
@@ -34,6 +36,22 @@ const empty = {
   shape: 'Almond',
   note: '',
 };
+const bookingDraftKey = 'glossedByRidhi-booking-draft';
+
+function readBookingDraft() {
+  try {
+    const saved = sessionStorage.getItem(bookingDraftKey);
+    if (!saved) return empty;
+    const draft = JSON.parse(saved);
+    return Object.fromEntries(Object.keys(empty).map((key) => [
+      key,
+      typeof draft[key] === 'string' ? draft[key] : empty[key],
+    ]));
+  } catch (storageError) {
+    console.error('Could not restore the saved appointment form.', storageError);
+    return empty;
+  }
+}
 
 const noFallbackServices = [];
 const noFallbackDesigns = [];
@@ -73,7 +91,10 @@ function getTimeSlots(settings) {
 }
 
 export default function Booking() {
-  const [form, setForm] = useState(empty);
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { session, pendingAction, requestAuthentication, consumePendingAction } = useAuth();
+  const [form, setForm] = useState(readBookingDraft);
   const [errors, setErrors] = useState({});
   const [done, setDone] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -96,6 +117,23 @@ export default function Booking() {
     'booking designs',
   );
   const timeSlots = useMemo(() => getTimeSlots(businessSettings), [businessSettings]);
+
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(bookingDraftKey, JSON.stringify(form));
+    } catch (storageError) {
+      setErrors((current) => ({ ...current, submit: `Could not preserve your appointment details: ${storageError.message}` }));
+    }
+  }, [form]);
+
+  useEffect(() => {
+    if (!session?.user) return;
+    setForm((current) => ({
+      ...current,
+      name: current.name || session.user.user_metadata?.full_name || '',
+      email: current.email || session.user.email || '',
+    }));
+  }, [session]);
 
   useEffect(() => {
     const selectDesign = (event) => {
@@ -191,8 +229,7 @@ export default function Booking() {
     });
   };
 
-  const submit = async (event) => {
-    event.preventDefault();
+  const validate = () => {
     if (submissionLock.current) return;
     const nextErrors = {};
 
@@ -217,14 +254,22 @@ export default function Booking() {
     }
 
     setErrors(nextErrors);
-    if (Object.keys(nextErrors).length) return;
+    return Object.keys(nextErrors).length === 0;
+  };
 
+  const save = async () => {
+    if (submissionLock.current || !session?.user) return;
     submissionLock.current = true;
     setSaving(true);
     try {
       await saveBooking(form);
       setDone(true);
       setForm(empty);
+      try {
+        sessionStorage.removeItem(bookingDraftKey);
+      } catch (storageError) {
+        console.error('Could not clear the saved appointment form.', storageError);
+      }
     } catch (error) {
       setErrors((current) => ({
         ...current,
@@ -237,6 +282,41 @@ export default function Booking() {
       setSaving(false);
     }
   };
+
+  const submit = async (event) => {
+    event.preventDefault();
+    if (submissionLock.current || !validate()) return;
+    if (!session?.user) {
+      requestAuthentication('appointment');
+      navigate('/login', { state: { from: `${location.pathname}${location.search}` } });
+      return;
+    }
+    await save();
+  };
+
+  useEffect(() => {
+    if (
+      !session?.user
+      || pendingAction !== 'appointment'
+      || servicesLoading
+      || designsLoading
+      || settingsLoading
+      || slotsLoading
+      || pendingDesignSelection
+      || submissionLock.current
+    ) return;
+
+    if (consumePendingAction('appointment') && validate()) void save();
+  }, [
+    session,
+    pendingAction,
+    servicesLoading,
+    designsLoading,
+    settingsLoading,
+    slotsLoading,
+    pendingDesignSelection,
+    consumePendingAction,
+  ]);
 
   return (
     <section id="booking" className="sec alt">

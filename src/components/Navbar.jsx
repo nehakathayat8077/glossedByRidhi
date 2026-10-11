@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ShoppingBag, Menu, X, Instagram, MessageCircle } from 'lucide-react';
+import { ShoppingBag, Menu, X, Instagram, MessageCircle, UserRound } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
 import { useCart } from '../context/CartContext';
+import { useAuth } from '../context/AuthContext';
 const links = ['Home', 'About', 'Designs', 'Services', 'Shop', 'Booking'];
 const instagramHandle = import.meta.env.VITE_INSTAGRAM_HANDLE;
 const whatsappNumber = import.meta.env.VITE_WHATSAPP_NUMBER;
@@ -10,6 +12,8 @@ export default function Navbar() {
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const { count, setOpen } = useCart();
+  const { session } = useAuth();
+  const navigate = useNavigate();
 
   // Update the sticky header state when the page scrolls.
   useEffect(() => {
@@ -22,15 +26,20 @@ export default function Navbar() {
   // Scroll to the requested page section and close the mobile menu.
   const go = (label) => {
     setMobileOpen(false);
-    document.getElementById(label.toLowerCase())?.scrollIntoView({ behavior: 'smooth' });
+    const target = document.getElementById(label.toLowerCase());
+    if (target) target.scrollIntoView({ behavior: 'smooth' });
+    else {
+      navigate('/');
+      window.setTimeout(() => document.getElementById(label.toLowerCase())?.scrollIntoView({ behavior: 'smooth' }), 0);
+    }
   };
 
   return (
     <header className={'nav' + (scrolled ? ' scrolled' : '')}>
       <div className="wrap nav-in">
-        <a className="logo" href="#">
+        <Link className="logo" to="/">
           GlossedBy<em>Ridhi</em>
-        </a>
+        </Link>
 
         <nav className="links">
           {links.map((label) => (
@@ -52,6 +61,11 @@ export default function Navbar() {
             <ShoppingBag size={20} />
             {count > 0 && <b>{count}</b>}
           </button>
+
+          <Link className="nav-account" to={session ? '/account' : '/login'} aria-label={session ? 'My account' : 'Sign in'}>
+            <UserRound size={18} />
+            <span>{session ? 'Account' : 'Sign in'}</span>
+          </Link>
 
           <button className="btn sm hide-m" onClick={() => go('Booking')}>
             Book Appointment
@@ -76,6 +90,10 @@ export default function Navbar() {
                 {label}
               </button>
             ))}
+
+            <Link className="nav-mobile-account" to={session ? '/account' : '/login'} onClick={() => setMobileOpen(false)}>
+              {session ? 'My account' : 'Sign in / Create account'}
+            </Link>
 
             <button className="btn" onClick={() => go('Booking')}>
               Book Appointment

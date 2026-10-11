@@ -7,3 +7,5 @@
 # Build output and installed packages.
 node_modules/
 dist/
+playwright-report/
+test-results/

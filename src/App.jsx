@@ -8,11 +8,15 @@ import Booking from './components/Booking';
 import FAQ from './components/FAQ';
 import Footer from './components/Footer';
 import CartDrawer from './components/CartDrawer';
-import { Route, Routes } from 'react-router-dom';
+import CustomerAccount from './components/CustomerAccount';
+import CustomerAuth from './components/CustomerAuth';
+import { Route, Routes, useLocation } from 'react-router-dom';
 
 const AdminApp = lazy(() => import('./admin/AdminApp'));
 
 function CustomerWebsite() {
+  const location = useLocation();
+
   return (
     <>
       <Navbar />
@@ -40,6 +44,7 @@ function CustomerWebsite() {
 
       <Footer />
       <CartDrawer />
+      {(location.pathname === '/login' || location.pathname === '/signup') && <CustomerAuth />}
     </>
   );
 }
@@ -48,6 +53,7 @@ export default function App() {
   return (
     <Routes>
       <Route path="/admin/*" element={<Suspense fallback={<div className="admin-state">Loading admin dashboard…</div>}><AdminApp /></Suspense>} />
+      <Route path="/account" element={<CustomerAccount />} />
       <Route path="*" element={<CustomerWebsite />} />
     </Routes>
   );
