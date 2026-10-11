@@ -905,6 +905,177 @@ img {
   line-height: 1.1;
 }
 
+.admin-page-heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.admin-page-heading h1 {
+  margin: 6px 0 4px;
+  font-family: Fraunces, serif;
+  font-size: clamp(1.6rem, 3vw, 2.2rem);
+  font-weight: 500;
+}
+
+.admin-page-heading h1 span {
+  color: var(--primary);
+}
+
+.admin-page-heading p,
+.admin-data-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.admin-secondary-btn {
+  display: inline-flex;
+  min-height: 38px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 1px solid #e8d5d3;
+  border-radius: 8px;
+  background: #fffdfa;
+  color: #73525c;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.85rem;
+}
+
+.admin-secondary-btn:disabled {
+  cursor: wait;
+  opacity: 0.7;
+}
+
+.admin-inline-error {
+  padding: 11px 14px;
+  border: 1px solid #edc2bd;
+  border-radius: 9px;
+  background: #fff1ef;
+  color: #963b36;
+  font-size: 0.88rem;
+}
+
+.admin-stat-icon.rose {
+  background: #f8e9e9;
+  color: var(--primary);
+}
+
+.admin-stat-icon.amber {
+  background: #fff1d7;
+  color: #895d12;
+}
+
+.admin-stat-icon.green {
+  background: #e5f3e9;
+  color: #28633b;
+}
+
+.admin-stat-icon.muted {
+  background: #f1ecea;
+  color: #705b5f;
+}
+
+.admin-overview-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.admin-panel-heading h2 {
+  margin: 4px 0 0;
+  font-size: 1.2rem;
+}
+
+.admin-panel-heading > svg {
+  color: var(--primary);
+}
+
+.admin-list {
+  display: grid;
+}
+
+.admin-list-row {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0;
+  border-top: 1px solid #f1e5e2;
+}
+
+.admin-list-date {
+  flex: 0 0 78px;
+  color: #73525c;
+  font-size: 0.77rem;
+  font-weight: 700;
+}
+
+.admin-list-main {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+  gap: 3px;
+}
+
+.admin-list-main strong,
+.admin-list-main small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-list-main strong {
+  color: var(--wine);
+  font-size: 0.88rem;
+}
+
+.admin-list-main small {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.admin-order-avatar {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+  place-items: center;
+  border-radius: 50%;
+  background: #f8e9e9;
+  color: var(--primary);
+  font-family: Fraunces, serif;
+}
+
+.admin-data-note {
+  padding-top: 2px;
+  font-size: 0.76rem;
+}
+
+.admin-spinner {
+  display: inline-block;
+  width: 17px;
+  height: 17px;
+  margin-right: 7px;
+  vertical-align: -3px;
+  border: 2px solid #efd9d6;
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: admin-spin 0.8s linear infinite;
+}
+
+.spin {
+  animation: admin-spin 0.8s linear infinite;
+}
+
+@keyframes admin-spin {
+  to { transform: rotate(360deg); }
+}
+
 .admin-recent-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1578,7 +1749,8 @@ img {
 }
 
 .checkout-form input,
-.checkout-form textarea {
+.checkout-form textarea,
+.checkout-form select {
   width: 100%;
   padding: 9px 10px;
   border: 1px solid var(--secondary);
@@ -1587,11 +1759,30 @@ img {
   font: inherit;
 }
 
+.checkout-payment-note {
+  margin: -4px 0 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
 .checkout-success {
   position: relative;
   margin-top: 12px;
   padding-right: 34px;
   font-size: 0.83rem;
+}
+
+.checkout-whatsapp-link {
+  display: inline-flex;
+  width: fit-content;
+  margin-top: 7px;
+  color: var(--wine);
+  font-weight: 700;
+}
+
+.checkout-success > p {
+  margin: 7px 0 0;
+  font-size: 0.78rem;
 }
 
 .checkout-success button {
@@ -1666,6 +1857,7 @@ img {
 
 @media (max-width: 700px) {
   .admin-recent-grid,
+  .admin-overview-grid,
   .admin-settings-grid {
     grid-template-columns: 1fr;
   }
@@ -1675,6 +1867,10 @@ img {
   }
 
   .admin-page-intro {
+    align-items: start;
+  }
+
+  .admin-page-heading {
     align-items: start;
   }
 
@@ -1739,6 +1935,14 @@ img {
   .admin-page-intro {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .admin-page-heading {
+    align-items: start;
+  }
+
+  .admin-page-heading .admin-secondary-btn {
+    padding: 8px;
   }
 
   .admin-form-grid,

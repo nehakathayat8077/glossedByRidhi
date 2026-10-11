@@ -269,6 +269,8 @@ function OrderDetails({ order, onClose, onStatus }) {
         <div className="admin-modal-heading"><div><span className="admin-eyebrow">ORDER #{order.id.slice(0, 8)}</span><h2>Order details</h2></div><button className="admin-icon-button" onClick={onClose} aria-label="Close"><X /></button></div>
         <div className="admin-order-details">
           <p><strong>Customer</strong>{order.customer_name}</p><p><strong>Phone</strong>{order.phone}</p><p><strong>Address</strong>{order.address}</p><p><strong>Placed</strong>{formatDate(order.created_at)}</p>
+          <p><strong>Payment method</strong>{order.payment_method === 'cod' ? 'Cash on Delivery' : order.payment_method === 'qr_whatsapp' ? 'QR via WhatsApp' : 'Not recorded'}</p>
+          <p><strong>Payment status</strong>{order.payment_status || 'Not recorded'}</p>
         </div>
         <h3 className="admin-subheading">Purchased items (saved order snapshot)</h3>
         {Array.isArray(order.items) && order.items.length ? <div className="admin-order-lines">{order.items.map((item, index) => <div key={`${item.id || item.name}-${index}`}><span>{item.name || 'Product'} × {item.qty || item.quantity || 1}</span><strong>₹{Number(item.line_total ?? (item.unit_price ?? item.price ?? 0) * (item.qty ?? item.quantity ?? 1)).toLocaleString('en-IN')}</strong></div>)}</div> : <p className="admin-empty">No item details were saved for this order.</p>}
@@ -338,11 +340,12 @@ function OrdersManager() {
       <div className="admin-panel admin-table-panel">
         {loading ? <p className="admin-state">Loading orders…</p> : filtered.length === 0 ? <p className="admin-empty">No orders match these filters.</p> : (
           <div className="admin-table-scroll"><table className="admin-table">
-            <thead><tr><th>Order</th><th>Customer</th><th>Items</th><th>Total</th><th>Date</th><th>Status</th><th>Details</th></tr></thead>
+            <thead><tr><th>Order</th><th>Customer</th><th>Items</th><th>Total</th><th>Payment</th><th>Date</th><th>Status</th><th>Details</th></tr></thead>
             <tbody>{filtered.slice(page * pageSize, (page + 1) * pageSize).map((record) => (
               <tr key={record.id}>
                 <td>#{record.id.slice(0, 8)}</td><td><strong>{record.customer_name}</strong><small>{record.phone}</small></td>
                 <td>{Array.isArray(record.items) ? record.items.length : 0} line items</td><td>₹{Number(record.total).toLocaleString('en-IN')}</td>
+                <td>{record.payment_method === 'cod' ? 'COD' : record.payment_method === 'qr_whatsapp' ? 'QR / WhatsApp' : '—'}<small>{record.payment_status || 'Not recorded'}</small></td>
                 <td>{formatDate(record.created_at)}</td><td><span className={`admin-badge status-${record.status}`}>{record.status}</span></td>
                 <td><button className="admin-icon-button" onClick={() => setSelected(record)} aria-label={`View order ${record.id}`}><Eye size={17} /></button></td>
               </tr>

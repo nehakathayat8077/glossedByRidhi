@@ -1,11 +1,12 @@
 import { supabase } from './supabaseClient';
 
-export async function submitOrder({ customerName, phone, address, items }) {
+export async function submitOrder({ customerName, phone, address, items, paymentMethod }) {
   const { data, error } = await supabase.rpc('create_order', {
-    p_customer_name: customerName,
-    p_phone: phone,
     p_address: address,
+    p_customer_name: customerName,
     p_items: items.map((item) => ({ id: item.id, qty: item.qty })),
+    p_payment_method: paymentMethod,
+    p_phone: phone,
   });
 
   if (error) throw error;

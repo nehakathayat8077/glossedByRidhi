@@ -65,6 +65,10 @@ create table if not exists public.orders (
   total numeric(10, 2) not null check (total >= 0),
   status text not null default 'new'
     check (status in ('new', 'paid', 'shipped', 'delivered', 'cancelled')),
+  payment_method text
+    check (payment_method is null or payment_method in ('cod', 'qr_whatsapp')),
+  payment_status text
+    check (payment_status is null or payment_status in ('pending', 'paid', 'failed', 'refunded')),
   created_at timestamptz not null default now()
 );
 
