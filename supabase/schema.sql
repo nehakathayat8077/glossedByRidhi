@@ -74,6 +74,14 @@ create table if not exists public.orders (
   created_at timestamptz not null default now()
 );
 
+create table if not exists public.customer_store_state (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  cart jsonb not null default '[]'::jsonb
+    check (jsonb_typeof(cart) = 'array'),
+  wishlist jsonb not null default '[]'::jsonb
+    check (jsonb_typeof(wishlist) = 'array')
+);
+
 create table if not exists public.newsletter_subscribers (
   id uuid primary key default gen_random_uuid(),
   email text not null unique,
@@ -96,6 +104,7 @@ alter table public.designs enable row level security;
 alter table public.products enable row level security;
 alter table public.appointments enable row level security;
 alter table public.orders enable row level security;
+alter table public.customer_store_state enable row level security;
 alter table public.newsletter_subscribers enable row level security;
 alter table public.business_settings enable row level security;
 
@@ -108,6 +117,8 @@ grant select, insert, update, delete
   on public.services, public.designs, public.products,
      public.orders, public.newsletter_subscribers, public.business_settings
   to authenticated;
+revoke all privileges on public.customer_store_state from public, anon, authenticated;
+grant select, insert, update on public.customer_store_state to authenticated;
 revoke update on public.appointments from public, anon, authenticated;
 grant select, insert, delete on public.appointments to authenticated;
 grant update (status) on public.appointments to authenticated;
@@ -260,6 +271,16 @@ create policy "Customers can read own appointments"
   on public.appointments for select to authenticated using (user_id = auth.uid());
 create policy "Customers can read own orders"
   on public.orders for select to authenticated using (user_id = auth.uid());
+create policy "Customers can read own store state"
+  on public.customer_store_state for select to authenticated
+  using (user_id = auth.uid());
+create policy "Customers can insert own store state"
+  on public.customer_store_state for insert to authenticated
+  with check (user_id = auth.uid());
+create policy "Customers can update own store state"
+  on public.customer_store_state for update to authenticated
+  using (user_id = auth.uid())
+  with check (user_id = auth.uid());
 create policy "Customers can read active services"
   on public.services for select to authenticated using (is_active);
 create policy "Customers can read active designs"

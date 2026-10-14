@@ -9,19 +9,28 @@ import { submitOrder } from '../lib/orders';
 
 const whatsappNumber = import.meta.env.VITE_WHATSAPP_NUMBER;
 const whatsappDigits = String(whatsappNumber || '').replace(/\D/g, '');
+const guestCheckoutDraftKey = 'glossedByRidhi-checkout-draft';
+
+function checkoutDraftKey(userId) {
+  return userId ? `${guestCheckoutDraftKey}:${userId}` : guestCheckoutDraftKey;
+}
 
 export default function CartDrawer() {
   const { open, setOpen, items, qty, remove, clear, subtotal, say } = useCart();
   const navigate = useNavigate();
   const location = useLocation();
-  const { session, pendingAction, requestAuthentication, consumePendingAction } = useAuth();
+  const { session, loading: authLoading, pendingAction, requestAuthentication, consumePendingAction } = useAuth();
+  const userId = session?.user?.id || null;
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [customer, setCustomer] = useState({ customerName: '', phone: '', address: '' });
+  const [draftOwnerId, setDraftOwnerId] = useState(undefined);
+  const [clearGuestDraftAfterSave, setClearGuestDraftAfterSave] = useState(false);
   const [checkoutError, setCheckoutError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState('cod');
   const [placedOrder, setPlacedOrder] = useState(null);
   const submissionLock = useRef(false);
+  const previousUserId = useRef(undefined);
   const ship = subtotal > 999 || !items.length ? 0 : 60;
   const whatsappLink = placedOrder?.paymentMethod === 'qr_whatsapp' && whatsappDigits
     ? `https://wa.me/${whatsappDigits}?text=${encodeURIComponent(
@@ -74,7 +83,7 @@ export default function CartDrawer() {
       setCustomer({ customerName: '', phone: '', address: '' });
       setPaymentMethod('cod');
       try {
-        sessionStorage.removeItem('glossedByRidhi-checkout-draft');
+        sessionStorage.removeItem(checkoutDraftKey(userId));
       } catch (storageError) {
         console.error('Could not clear the saved checkout details.', storageError);
       }
@@ -105,19 +114,57 @@ export default function CartDrawer() {
   }, [session, pendingAction, checkoutOpen, items, consumePendingAction]);
 
   useEffect(() => {
-    if (checkoutOpen) {
-      try {
-        sessionStorage.setItem('glossedByRidhi-checkout-draft', JSON.stringify({ customer, paymentMethod }));
-      } catch (storageError) {
-        setCheckoutError(`Could not preserve your checkout details: ${storageError.message}`);
+    if (authLoading || draftOwnerId !== userId || !checkoutOpen) return;
+    try {
+      sessionStorage.setItem(checkoutDraftKey(userId), JSON.stringify({ customer, paymentMethod }));
+      if (userId && clearGuestDraftAfterSave) {
+        sessionStorage.removeItem(guestCheckoutDraftKey);
+        setClearGuestDraftAfterSave(false);
       }
+    } catch (storageError) {
+      setCheckoutError(`Could not preserve your checkout details: ${storageError.message}`);
     }
-  }, [checkoutOpen, customer, paymentMethod]);
+  }, [authLoading, checkoutOpen, clearGuestDraftAfterSave, customer, draftOwnerId, paymentMethod, userId]);
 
   useEffect(() => {
+    if (authLoading) return;
+    const priorUserId = previousUserId.current;
+    previousUserId.current = userId;
+
+    if (priorUserId === null && userId && pendingAction === 'order') {
+      setClearGuestDraftAfterSave(true);
+      setDraftOwnerId(userId);
+      return;
+    }
+
+    setDraftOwnerId(undefined);
+    setClearGuestDraftAfterSave(false);
+    setCheckoutOpen(false);
+    setOpen(false);
+    const resumeGuestCheckout = priorUserId === undefined && userId && pendingAction === 'order';
+    const savedKeys = resumeGuestCheckout
+      ? [checkoutDraftKey(userId), guestCheckoutDraftKey]
+      : [checkoutDraftKey(userId)];
+    let savedKey = savedKeys[0];
     try {
-      const saved = sessionStorage.getItem('glossedByRidhi-checkout-draft');
-      if (!saved) return;
+      let saved;
+      for (const key of savedKeys) {
+        saved = sessionStorage.getItem(key);
+        if (saved) {
+          savedKey = key;
+          break;
+        }
+      }
+      if (!saved) {
+        setCustomer({
+          customerName: session?.user?.user_metadata?.full_name || '',
+          phone: '',
+          address: '',
+        });
+        setPaymentMethod('cod');
+        setDraftOwnerId(userId);
+        return;
+      }
       const draft = JSON.parse(saved);
       if (draft.customer && typeof draft.customer === 'object') {
         setCustomer({
@@ -127,17 +174,32 @@ export default function CartDrawer() {
         });
         setCheckoutOpen(true);
         setOpen(true);
+        setClearGuestDraftAfterSave(Boolean(userId && savedKey === guestCheckoutDraftKey));
+      } else {
+        setCustomer({
+          customerName: session?.user?.user_metadata?.full_name || '',
+          phone: '',
+          address: '',
+        });
       }
-      if (draft.paymentMethod === 'cod' || draft.paymentMethod === 'qr_whatsapp') setPaymentMethod(draft.paymentMethod);
+      setPaymentMethod(draft.paymentMethod === 'qr_whatsapp' ? 'qr_whatsapp' : 'cod');
+      setDraftOwnerId(userId);
     } catch (error) {
       try {
-        sessionStorage.removeItem('glossedByRidhi-checkout-draft');
+        sessionStorage.removeItem(savedKey);
       } catch (storageError) {
         console.error('Could not remove invalid saved checkout details.', storageError);
       }
+      setCustomer({
+        customerName: session?.user?.user_metadata?.full_name || '',
+        phone: '',
+        address: '',
+      });
+      setPaymentMethod('cod');
       setCheckoutError(`Saved checkout details could not be restored: ${error.message}`);
+      setDraftOwnerId(userId);
     }
-  }, []);
+  }, [authLoading, pendingAction, session, setOpen, userId]);
 
   return (
     <AnimatePresence>

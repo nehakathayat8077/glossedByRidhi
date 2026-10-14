@@ -10,10 +10,10 @@ import './styles.css';
 // Mount the app with shared routing, authentication, and cart state.
 createRoot(document.getElementById('root')).render(
   <BrowserRouter>
-    <CartProvider>
-      <AuthProvider>
+    <AuthProvider>
+      <CartProvider>
         <App />
-      </AuthProvider>
-    </CartProvider>
+      </CartProvider>
+    </AuthProvider>
   </BrowserRouter>
 );
