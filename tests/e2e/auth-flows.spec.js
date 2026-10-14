@@ -149,3 +149,54 @@ test('admin password sign-in opens the existing management dashboard', async ({ 
   await expect.poll(() => orderRequestUrl).not.toBeUndefined();
   expect(orderRequestUrl).not.toContain('user_id=eq.');
 });
+
+test('admin order creation links the order through the customer account email', async ({ page }) => {
+  await mockSignIn(page, {
+    ...customer,
+    email: 'admin@example.com',
+    app_metadata: { provider: 'email', providers: ['email'], role: 'admin' },
+  });
+  await mockAdminData(page);
+
+  const productId = '30000000-0000-4000-8000-000000000001';
+  let createOrderPayload;
+  await page.route(/\/rest\/v1\/products(?:\?.*)?$/, (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify([{ id: productId, name: 'Velvet Press-ons', price: 599 }]),
+  }));
+  await page.route(/\/rest\/v1\/rpc\/admin_create_order(?:\?.*)?$/, async (route) => {
+    createOrderPayload = route.request().postDataJSON();
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify([{ order_id: '11111111-1111-4111-8111-111111111111', order_total: 659 }]),
+    });
+  });
+
+  await page.goto('/admin/login');
+  await page.getByLabel('Email').fill('admin@example.com');
+  await page.getByLabel('Password').fill('admin-password');
+  await page.getByRole('button', { name: 'Sign in securely' }).click();
+  await page.getByRole('link', { name: 'Orders' }).click();
+  await page.getByRole('button', { name: 'Create customer order' }).click();
+
+  await page.getByLabel('Customer account email').fill('customer@example.com');
+  await page.getByLabel('Customer name').fill('Ridhi Sharma');
+  await page.getByLabel('Phone').fill('9876543210');
+  await page.getByLabel('Delivery address').fill('221 Rose Avenue, Jaipur');
+  await page.getByLabel('Product').selectOption(productId);
+  await page.getByLabel('Quantity').fill('1');
+  await page.getByRole('button', { name: 'Create order', exact: true }).click();
+
+  await expect(page.getByText(/Customer order created.*payment pending/i)).toBeVisible();
+  expect(createOrderPayload).toMatchObject({
+    p_customer_email: 'customer@example.com',
+    p_customer_name: 'Ridhi Sharma',
+    p_phone: '9876543210',
+    p_address: '221 Rose Avenue, Jaipur',
+    p_items: [{ id: productId, qty: 1 }],
+    p_payment_method: 'cod',
+  });
+  expect(createOrderPayload).not.toHaveProperty('user_id');
+});

@@ -113,28 +113,26 @@ export function CartProvider({ children }) {
       cart: store.items,
       wishlist: store.wish,
     };
-    const timer = window.setTimeout(() => {
-      const write = writeQueue.current.catch(() => undefined).then(async () => {
-        if (activeUserId.current !== userId) return;
-        const { error } = await supabase
-          .from('customer_store_state')
-          .upsert(snapshot, { onConflict: 'user_id' });
-        if (error) throw error;
-      });
-      writeQueue.current = write;
-      write.then(() => {
-        setStore((current) => current.userId === userId
-          && current.items === snapshot.cart
-          && current.wish === snapshot.wishlist
-          ? { ...current, dirty: false }
-          : current);
-      }).catch((writeError) => {
-        console.error('Could not save the customer cart and wishlist.', writeError);
-        say(`Could not save your cart and wishlist: ${writeError.message || 'Please try again.'}`);
-      });
-    }, 200);
+    const write = writeQueue.current.catch(() => undefined).then(async () => {
+      if (activeUserId.current !== userId) return;
+      const { error } = await supabase
+        .from('customer_store_state')
+        .upsert(snapshot, { onConflict: 'user_id' });
+      if (error) throw error;
+    });
+    writeQueue.current = write;
+    write.then(() => {
+      setStore((current) => current.userId === userId
+        && current.items === snapshot.cart
+        && current.wish === snapshot.wishlist
+        ? { ...current, dirty: false }
+        : current);
+    }).catch((writeError) => {
+      console.error('Could not save the customer cart and wishlist.', writeError);
+      say(`Could not save your cart and wishlist: ${writeError.message || 'Please try again.'}`);
+    });
 
-    return () => window.clearTimeout(timer);
+    return undefined;
   }, [authLoading, say, store, userId]);
 
   const update = useCallback((field, updater) => {

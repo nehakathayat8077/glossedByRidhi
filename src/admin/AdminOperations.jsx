@@ -241,6 +241,136 @@ function OrderDetails({ order, onClose, onStatus }) {
   );
 }
 
+function CreateCustomerOrder({ onClose, onCreated }) {
+  const [products, setProducts] = useState([]);
+  const [productsLoading, setProductsLoading] = useState(true);
+  const [customer, setCustomer] = useState({
+    email: '',
+    name: '',
+    phone: '',
+    address: '',
+    paymentMethod: 'cod',
+  });
+  const [items, setItems] = useState([{ productId: '', quantity: 1 }]);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let active = true;
+    supabase
+      .from('products')
+      .select('id, name, price')
+      .eq('is_active', true)
+      .order('name')
+      .then(({ data, error: loadError }) => {
+        if (!active) return;
+        if (loadError) setError(loadError.message);
+        else setProducts(data || []);
+        setProductsLoading(false);
+      })
+      .catch((loadError) => {
+        if (!active) return;
+        setError(loadError.message || 'Could not load products.');
+        setProductsLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const updateItem = (index, changes) => {
+    setItems((current) => current.map((item, itemIndex) =>
+      itemIndex === index ? { ...item, ...changes } : item,
+    ));
+  };
+
+  const submit = async (event) => {
+    event.preventDefault();
+    setSaving(true);
+    setError('');
+    try {
+      const { data, error: createError } = await supabase.rpc('admin_create_order', {
+        p_customer_email: customer.email.trim(),
+        p_customer_name: customer.name.trim(),
+        p_phone: customer.phone.trim(),
+        p_address: customer.address.trim(),
+        p_items: items.map((item) => ({
+          id: item.productId,
+          qty: Number(item.quantity),
+        })),
+        p_payment_method: customer.paymentMethod,
+      });
+      if (createError) throw createError;
+
+      const created = Array.isArray(data) ? data[0] : data;
+      if (!created?.order_id) {
+        throw new Error('The order could not be confirmed by the order service.');
+      }
+      await onCreated(created);
+    } catch (createError) {
+      setError(createError.message || 'Could not create the customer order.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="admin-modal-backdrop" role="presentation" onMouseDown={(event) => {
+      if (event.target === event.currentTarget && !saving) onClose();
+    }}>
+      <section className="admin-modal" role="dialog" aria-modal="true" aria-labelledby="create-customer-order-title">
+        <div className="admin-modal-heading">
+          <div><span className="admin-eyebrow">CUSTOMER PURCHASE</span><h2 id="create-customer-order-title">Create order</h2></div>
+          <button type="button" className="admin-icon-button" onClick={onClose} aria-label="Close" disabled={saving}><X /></button>
+        </div>
+        <form onSubmit={submit}>
+          <label className="admin-field">Customer account email
+            <input type="email" autoComplete="email" required value={customer.email} onChange={(event) => setCustomer({ ...customer, email: event.target.value })} />
+          </label>
+          <label className="admin-field">Customer name
+            <input autoComplete="name" required minLength={2} maxLength={120} value={customer.name} onChange={(event) => setCustomer({ ...customer, name: event.target.value })} />
+          </label>
+          <label className="admin-field">Phone
+            <input type="tel" required minLength={7} value={customer.phone} onChange={(event) => setCustomer({ ...customer, phone: event.target.value })} />
+          </label>
+          <label className="admin-field">Delivery address
+            <textarea required minLength={5} maxLength={1000} rows={2} value={customer.address} onChange={(event) => setCustomer({ ...customer, address: event.target.value })} />
+          </label>
+          <h3 className="admin-subheading">Items</h3>
+          {items.map((item, index) => (
+            <div className="admin-order-details" key={index}>
+              <label className="admin-field">Product
+                <select required value={item.productId} disabled={productsLoading || !products.length} onChange={(event) => updateItem(index, { productId: event.target.value })}>
+                  <option value="">{productsLoading ? 'Loading products…' : 'Select a product'}</option>
+                  {products.map((product) => <option key={product.id} value={product.id}>{product.name} · ₹{Number(product.price).toLocaleString('en-IN')}</option>)}
+                </select>
+              </label>
+              <label className="admin-field">Quantity
+                <input type="number" min={1} max={100} required value={item.quantity} onChange={(event) => updateItem(index, { quantity: event.target.value })} />
+              </label>
+              {items.length > 1 && <button type="button" className="admin-secondary-button" onClick={() => setItems((current) => current.filter((_, itemIndex) => itemIndex !== index))}>Remove item</button>}
+            </div>
+          ))}
+          <button type="button" className="admin-secondary-button" disabled={productsLoading || !products.length} onClick={() => setItems((current) => [...current, { productId: '', quantity: 1 }])}>Add another item</button>
+          <label className="admin-field">Payment method
+            <select value={customer.paymentMethod} onChange={(event) => setCustomer({ ...customer, paymentMethod: event.target.value })}>
+              <option value="cod">Cash on Delivery</option>
+              <option value="qr_whatsapp">QR / WhatsApp</option>
+            </select>
+          </label>
+          <p className="admin-note">The order total is calculated by the checkout service. New orders remain unpaid until payment is verified.</p>
+          {error && <p className="admin-error" role="alert">{error}</p>}
+          <div className="admin-modal-actions">
+            <button type="button" className="admin-secondary-button" onClick={onClose} disabled={saving}>Cancel</button>
+            <button type="submit" className="btn" disabled={saving || productsLoading || !products.length}>{saving ? 'Creating…' : 'Create order'}</button>
+          </div>
+        </form>
+      </section>
+    </div>
+  );
+}
+
 function OrdersManager() {
   const notify = useAdminNotice();
   const [searchParams] = useSearchParams();
@@ -252,6 +382,7 @@ function OrdersManager() {
   const [date, setDate] = useState('');
   const [page, setPage] = useState(0);
   const [selected, setSelected] = useState(null);
+  const [createOpen, setCreateOpen] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -290,9 +421,15 @@ function OrdersManager() {
     }
   };
 
+  const handleOrderCreated = async (order) => {
+    setCreateOpen(false);
+    await load();
+    notify(`Customer order created. Total: ₹${Number(order.order_total).toLocaleString('en-IN')}; payment pending.`);
+  };
+
   return (
     <section className="admin-page">
-      <div className="admin-page-intro"><div><span className="admin-eyebrow">CUSTOMER PURCHASES</span><h2>Orders</h2></div><span className="admin-record-count">{records.length} total</span></div>
+      <div className="admin-page-intro"><div><span className="admin-eyebrow">CUSTOMER PURCHASES</span><h2>Orders</h2></div><div className="admin-row-actions"><span className="admin-record-count">{records.length} total</span><button type="button" className="btn" onClick={() => setCreateOpen(true)}>Create customer order</button></div></div>
       <OperationsToolbar query={query} setQuery={(value) => { setQuery(value); setPage(0); }} status={status} setStatus={(value) => { setStatus(value); setPage(0); }} statuses={orderStatuses} date={date} setDate={(value) => { setDate(value); setPage(0); }} searchPlaceholder="Search customer, phone or order ID" />
       {error && <div className="admin-alert" role="alert">{error}</div>}
       <div className="admin-panel admin-table-panel">
@@ -313,6 +450,7 @@ function OrdersManager() {
         {!loading && <Pagination page={page} setPage={setPage} count={filtered.length} />}
       </div>
       {selected && <OrderDetails order={selected} onClose={() => setSelected(null)} onStatus={updateStatus} />}
+      {createOpen && <CreateCustomerOrder onClose={() => setCreateOpen(false)} onCreated={handleOrderCreated} />}
     </section>
   );
 }
