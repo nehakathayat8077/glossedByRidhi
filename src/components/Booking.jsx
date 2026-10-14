@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence } from 'framer-motion';
-import { useLocation, useNavigate } from 'react-router-dom';
 import { Modal } from './NailDesigns';
 import { loadActiveDesigns, loadActiveServices } from '../lib/catalogLoaders';
 import { useCatalogData } from '../hooks/useCatalogData';
@@ -12,7 +11,7 @@ export async function saveBooking(booking) {
     booking.shape ? `Nail shape: ${booking.shape}` : '',
     booking.note?.trim() || '',
   ].filter(Boolean).join('\n');
-  const { error } = await supabase.from('appointments').insert({
+  const appointment = {
     name: booking.name.trim(),
     phone: booking.phone.trim(),
     email: booking.email.trim(),
@@ -21,7 +20,9 @@ export async function saveBooking(booking) {
     appointment_date: booking.date,
     time_slot: booking.time,
     notes: notes || null,
-  });
+  };
+
+  const { error } = await supabase.from('appointments').insert(appointment);
   if (error) throw error;
 }
 
@@ -91,9 +92,7 @@ function getTimeSlots(settings) {
 }
 
 export default function Booking() {
-  const navigate = useNavigate();
-  const location = useLocation();
-  const { session, pendingAction, requestAuthentication, consumePendingAction } = useAuth();
+  const { session } = useAuth();
   const [form, setForm] = useState(readBookingDraft);
   const [errors, setErrors] = useState({});
   const [done, setDone] = useState(false);
@@ -258,7 +257,7 @@ export default function Booking() {
   };
 
   const save = async () => {
-    if (submissionLock.current || !session?.user) return;
+    if (submissionLock.current) return;
     submissionLock.current = true;
     setSaving(true);
     try {
@@ -286,37 +285,8 @@ export default function Booking() {
   const submit = async (event) => {
     event.preventDefault();
     if (submissionLock.current || !validate()) return;
-    if (!session?.user) {
-      requestAuthentication('appointment');
-      navigate('/login', { state: { from: `${location.pathname}${location.search}` } });
-      return;
-    }
     await save();
   };
-
-  useEffect(() => {
-    if (
-      !session?.user
-      || pendingAction !== 'appointment'
-      || servicesLoading
-      || designsLoading
-      || settingsLoading
-      || slotsLoading
-      || pendingDesignSelection
-      || submissionLock.current
-    ) return;
-
-    if (consumePendingAction('appointment') && validate()) void save();
-  }, [
-    session,
-    pendingAction,
-    servicesLoading,
-    designsLoading,
-    settingsLoading,
-    slotsLoading,
-    pendingDesignSelection,
-    consumePendingAction,
-  ]);
 
   return (
     <section id="booking" className="sec alt">

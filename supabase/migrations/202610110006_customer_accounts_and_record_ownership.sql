@@ -161,7 +161,7 @@ begin
 end;
 $$;
 
-grant execute on function public.create_order(text, text, jsonb, text, text) to authenticated;
+grant execute on function public.create_order(text, text, text, jsonb, text) to authenticated;
 
 notify pgrst, 'reload schema';
 

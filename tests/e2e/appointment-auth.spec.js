@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 
-test('appointment form accepts complete text and retains its draft across login navigation', async ({ page }) => {
+test('appointment form accepts complete text and retains its draft across reloads', async ({ page }) => {
   await page.goto('/');
   await page.getByLabel('Name').first().fill('Ridhi Sharma');
   await page.getByLabel('Phone').first().fill('9876543210');
@@ -13,9 +13,7 @@ test('appointment form accepts complete text and retains its draft across login 
     return saved ? JSON.parse(saved).name : null;
   })).toBe('Ridhi Sharma');
 
-  await page.goto('/login');
-  await expect(page.getByRole('dialog', { name: 'Welcome back' })).toBeVisible();
-  await page.getByRole('button', { name: 'Close sign in' }).click();
+  await page.reload();
 
   await expect(page.getByLabel('Name').first()).toHaveValue('Ridhi Sharma');
   await expect(page.getByLabel('Phone').first()).toHaveValue('9876543210');

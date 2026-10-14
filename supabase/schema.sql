@@ -38,6 +38,7 @@ create table if not exists public.products (
 create table if not exists public.appointments (
   id uuid primary key default gen_random_uuid(),
   customer_id uuid references auth.users(id) on delete set null,
+  user_id uuid references auth.users(id) on delete set null,
   name text not null,
   phone text not null,
   email text not null,
@@ -58,6 +59,7 @@ create unique index if not exists appointments_one_active_booking_per_slot
 
 create table if not exists public.orders (
   id uuid primary key default gen_random_uuid(),
+  user_id uuid references auth.users(id) on delete set null,
   customer_name text not null,
   phone text not null,
   address text not null,
@@ -103,9 +105,12 @@ grant insert (name, phone, email, service_id, design_id, appointment_date, time_
   on public.appointments to anon;
 grant insert (email) on public.newsletter_subscribers to anon;
 grant select, insert, update, delete
-  on public.services, public.designs, public.products, public.appointments,
+  on public.services, public.designs, public.products,
      public.orders, public.newsletter_subscribers, public.business_settings
   to authenticated;
+revoke update on public.appointments from public, anon, authenticated;
+grant select, insert, delete on public.appointments to authenticated;
+grant update (status) on public.appointments to authenticated;
 
 create or replace function public.is_admin()
 returns boolean
@@ -134,6 +139,7 @@ begin
   if not public.is_admin() then
     new.id := gen_random_uuid();
     new.customer_id := auth.uid();
+    new.user_id := auth.uid();
     new.status := 'pending';
     new.created_at := now();
   end if;
@@ -197,6 +203,24 @@ begin
 end;
 $$;
 
+create or replace function public.assign_order_user_id()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  new.user_id := auth.uid();
+  return new;
+end;
+$$;
+
+revoke all on function public.assign_order_user_id() from public;
+drop trigger if exists orders_assign_user_id on public.orders;
+create trigger orders_assign_user_id
+  before insert on public.orders
+  for each row execute function public.assign_order_user_id();
+
 revoke all on function public.prepare_appointment_request() from public;
 
 create trigger appointments_prepare_request
@@ -227,10 +251,19 @@ create policy "Public can read active designs"
 create policy "Public can read active products"
   on public.products for select to anon using (is_active);
 create policy "Public can request appointments"
-  on public.appointments for insert to anon with check (status = 'pending');
+  on public.appointments for insert to anon
+  with check (status = 'pending' and customer_id is null and user_id is null);
 create policy "Customers can request appointments"
   on public.appointments for insert to authenticated
-  with check (status = 'pending' and customer_id = auth.uid());
+  with check (status = 'pending' and customer_id = auth.uid() and user_id = auth.uid());
+create policy "Customers can read own appointments"
+  on public.appointments for select to authenticated using (user_id = auth.uid());
+create policy "Customers can read own orders"
+  on public.orders for select to authenticated using (user_id = auth.uid());
+create policy "Customers can read active services"
+  on public.services for select to authenticated using (is_active);
+create policy "Customers can read active designs"
+  on public.designs for select to authenticated using (is_active);
 create policy "Public can subscribe to newsletter"
   on public.newsletter_subscribers for insert to anon with check (true);
 create policy "Public can read business settings"

@@ -18,7 +18,7 @@ function safeReturnPath(value) {
 export default function CustomerAuth() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { session, pendingAction, clearPendingAction } = useAuth();
+  const { session, loading: authLoading, pendingAction, clearPendingAction } = useAuth();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -41,6 +41,7 @@ export default function CustomerAuth() {
 
   const submit = async (event) => {
     event.preventDefault();
+    if (authLoading) return;
     setWorking(true);
     setError('');
     setNotice('');
@@ -54,7 +55,11 @@ export default function CustomerAuth() {
         });
         if (signUpError) throw signUpError;
         if (data.session) navigate(returnTo, { replace: true });
-        else setNotice('Check your email for a confirmation link. Your pending booking or checkout will resume after you sign in.');
+        else if (data.user) {
+          setNotice('Your account was created, but Supabase still requires email confirmation. In the Supabase Dashboard, open Authentication > Sign In / Providers > Email and turn off Confirm email for immediate sign-in.');
+        } else {
+          throw new Error('Your account was not created. Please try again.');
+        }
       } else {
         const { data, error: signInError } = await supabase.auth.signInWithPassword({
           email: email.trim(),
@@ -100,7 +105,9 @@ export default function CustomerAuth() {
           {error && <p className="admin-error" role="alert">{error}</p>}
           {notice && <p className="customer-auth-notice" role="status">{notice}</p>}
           {pendingAction && <p className="customer-auth-note">Your {pendingAction === 'order' ? 'checkout' : 'appointment request'} will continue after you sign in.</p>}
-          <button className="btn full" disabled={working}>{working ? 'Please wait…' : isSignup ? 'Create account' : 'Sign in'}</button>
+          <button className="btn full" disabled={working || authLoading}>
+            {authLoading ? 'Checking your session…' : working ? 'Please wait…' : isSignup ? 'Create account' : 'Sign in'}
+          </button>
           <p className="customer-auth-switch">
             {isSignup ? 'Already have an account?' : 'New to GlossedByRidhi?'}{' '}
             <Link to={isSignup ? '/login' : '/signup'} state={{ from: returnTo }}>

@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Eye, Pencil, Search, X } from 'lucide-react';
+import { Eye, Search, X } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import { supabase } from '../lib/supabaseClient';
 import { useAdminNotice } from './AdminLayout';
-import { loadActiveDesigns, loadActiveServices } from '../lib/catalogLoaders';
 
 const appointmentStatuses = ['pending', 'confirmed', 'completed', 'cancelled'];
 const orderStatuses = ['new', 'paid', 'shipped', 'delivered', 'cancelled'];
@@ -40,82 +39,25 @@ function Pagination({ page, setPage, count }) {
   );
 }
 
-function AppointmentEditor({ appointment, onClose, onSaved }) {
-  const [services, setServices] = useState([]);
-  const [designs, setDesigns] = useState([]);
-  const [form, setForm] = useState({
-    name: appointment.name || '',
-    phone: appointment.phone || '',
-    email: appointment.email || '',
-    appointment_date: appointment.appointment_date || '',
-    time_slot: appointment.time_slot?.slice(0, 5) || '',
-    service_id: appointment.service_id || '',
-    design_id: appointment.design_id || '',
-    service_name: appointment.service_name || '',
-    design_title: appointment.design_title || '',
-    notes: appointment.notes || '',
-    status: appointment.status,
-  });
+function AppointmentDetails({ appointment, onClose, onStatus }) {
+  const [status, setStatus] = useState(appointment.status);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
-    Promise.all([loadActiveServices(), loadActiveDesigns()])
-      .then(([activeServices, activeDesigns]) => {
-        setServices(activeServices);
-        setDesigns(activeDesigns);
-      })
-      .catch((loadError) => setError(loadError.message));
-  }, []);
-
-  const update = (key) => (event) => setForm((current) => ({ ...current, [key]: event.target.value }));
-
-  const save = async (event) => {
-    event.preventDefault();
+  const saveStatus = async () => {
     setSaving(true);
     setError('');
     try {
-      const { error: saveError } = await supabase
-        .from('appointments')
-        .update({
-          ...form,
-          service_id: form.service_id || null,
-          design_id: form.design_id || null,
-          notes: form.notes || null,
-        })
-        .eq('id', appointment.id);
-      if (saveError) setError(saveError.message);
-      else await onSaved();
+      const result = await onStatus(appointment, status);
+      if (result.error) setError(result.error);
+      else onClose();
     } catch (saveError) {
-      setError(saveError.message || 'Could not update this appointment.');
+      setError(saveError.message || 'Could not update appointment status.');
     } finally {
       setSaving(false);
     }
   };
 
-  return (
-    <div className="admin-modal-backdrop">
-      <form className="admin-modal" onSubmit={save}>
-        <div className="admin-modal-heading"><div><span className="admin-eyebrow">BOOKING DETAILS</span><h2>Edit appointment</h2></div><button type="button" className="admin-icon-button" onClick={onClose} aria-label="Close"><X /></button></div>
-        <div className="admin-form-grid">
-          <label className="admin-field">Customer name<input required value={form.name} onChange={update('name')} /></label>
-          <label className="admin-field">Phone<input required value={form.phone} onChange={update('phone')} /></label>
-          <label className="admin-field">Email<input required type="email" value={form.email} onChange={update('email')} /></label>
-          <label className="admin-field">Service<select required value={form.service_id} onChange={update('service_id')}><option value="">Choose a service</option>{form.service_id && !services.some((service) => service.id === form.service_id) && <option value={form.service_id}>{form.service_name || 'Previously selected service (inactive)'}</option>}{services.map((service) => <option value={service.id} key={service.id}>{service.name}</option>)}</select></label>
-          <label className="admin-field">Nail design<select value={form.design_id || ''} onChange={update('design_id')}><option value="">No design selected</option>{form.design_id && !designs.some((design) => design.id === form.design_id) && <option value={form.design_id}>{form.design_title || 'Previously selected design (inactive)'}</option>}{designs.map((design) => <option value={design.id} key={design.id}>{design.name}</option>)}</select></label>
-          <label className="admin-field">Appointment date<input required type="date" value={form.appointment_date} onChange={update('appointment_date')} /></label>
-          <label className="admin-field">Time slot<input required type="time" value={form.time_slot} onChange={update('time_slot')} /></label>
-          <label className="admin-field">Status<select value={form.status} onChange={update('status')}>{appointmentStatuses.map((status) => <option key={status}>{status}</option>)}</select></label>
-          <label className="admin-field full">Appointment notes<textarea rows="3" value={form.notes} onChange={update('notes')} /></label>
-        </div>
-        {error && <p className="admin-error" role="alert">{error}</p>}
-        <div className="admin-modal-actions"><button type="button" className="admin-secondary-button" onClick={onClose}>Cancel</button><button className="btn" disabled={saving}>{saving ? 'Saving…' : 'Save appointment'}</button></div>
-      </form>
-    </div>
-  );
-}
-
-function AppointmentDetails({ appointment, onClose, onEdit }) {
   return (
     <div className="admin-modal-backdrop" role="presentation" onMouseDown={(event) => {
       if (event.target === event.currentTarget) onClose();
@@ -126,20 +68,28 @@ function AppointmentDetails({ appointment, onClose, onEdit }) {
           <button type="button" className="admin-icon-button" onClick={onClose} aria-label="Close"><X /></button>
         </div>
         <div className="admin-order-details">
+          <p><strong>Booking reference</strong>{appointment.id.slice(0, 8)}</p>
           <p><strong>Email</strong>{appointment.email}</p>
           <p><strong>Phone</strong>{appointment.phone}</p>
           <p><strong>Service</strong>{appointment.service_name || '—'}</p>
           <p><strong>Nail design</strong>{appointment.design_title || '—'}</p>
           <p><strong>Requested date</strong>{formatDate(appointment.appointment_date)}</p>
-          <p><strong>Requested time</strong>{appointment.time_slot}</p>
-          <p><strong>Status</strong><span className={`admin-badge status-${appointment.status}`}>{appointment.status}</span></p>
+          <p><strong>Requested time</strong>{appointment.time_slot?.slice(0, 5) || '—'}</p>
           <p><strong>Booked</strong>{appointment.created_at ? new Date(appointment.created_at).toLocaleString() : '—'}</p>
         </div>
         <h3 className="admin-subheading">Customer notes</h3>
         <p className="admin-note">{appointment.notes || 'No notes provided.'}</p>
+        <label className="admin-field">Appointment status
+          <select value={status} onChange={(event) => setStatus(event.target.value)} disabled={saving}>
+            {appointmentStatuses.map((value) => <option key={value} value={value}>{value}</option>)}
+          </select>
+        </label>
+        {error && <p className="admin-error" role="alert">{error}</p>}
         <div className="admin-modal-actions">
           <button type="button" className="admin-secondary-button" onClick={onClose}>Close</button>
-          <button type="button" className="btn" onClick={onEdit}>Edit appointment</button>
+          <button type="button" className="btn" onClick={saveStatus} disabled={saving || status === appointment.status}>
+            {saving ? 'Saving…' : 'Save status'}
+          </button>
         </div>
       </section>
     </div>
@@ -156,7 +106,6 @@ function AppointmentManager() {
   const [status, setStatus] = useState(searchParams.get('status') || 'all');
   const [date, setDate] = useState('');
   const [page, setPage] = useState(0);
-  const [editing, setEditing] = useState(null);
   const [viewing, setViewing] = useState(null);
 
   const load = useCallback(async () => {
@@ -206,18 +155,29 @@ function AppointmentManager() {
   }, [records, query, status, date]);
 
   const updateStatus = async (record, nextStatus) => {
-    const { error: updateError } = await supabase.from('appointments').update({ status: nextStatus }).eq('id', record.id);
-    if (updateError) setError(updateError.message);
-    else {
+    if (!appointmentStatuses.includes(nextStatus)) {
+      const invalidStatusError = 'Choose a valid appointment status.';
+      setError(invalidStatusError);
+      return { error: invalidStatusError };
+    }
+
+    try {
+      const { error: updateError } = await supabase
+        .from('appointments')
+        .update({ status: nextStatus })
+        .eq('id', record.id);
+      if (updateError) {
+        setError(updateError.message);
+        return { error: updateError.message };
+      }
       await load();
       notify('Appointment status updated.');
+      return { error: null };
+    } catch (updateError) {
+      const message = updateError.message || 'Could not update appointment status.';
+      setError(message);
+      return { error: message };
     }
-  };
-
-  const saveEdit = async () => {
-    setEditing(null);
-    await load();
-    notify('Appointment updated.');
   };
 
   return (
@@ -238,7 +198,6 @@ function AppointmentManager() {
                 <td><span className={`admin-badge status-${record.status}`}>{record.status}</span></td>
                 <td><div className="admin-row-actions">
                   <button className="admin-icon-button" title="View appointment details" onClick={() => setViewing(record)}><Eye size={16} /></button>
-                  <button className="admin-icon-button" title="Edit details" onClick={() => setEditing(record)}><Pencil size={16} /></button>
                   <select className="admin-inline-status" aria-label="Appointment status" value={record.status} onChange={(event) => updateStatus(record, event.target.value)}>{appointmentStatuses.map((value) => <option key={value}>{value}</option>)}</select>
                 </div></td>
               </tr>
@@ -247,8 +206,7 @@ function AppointmentManager() {
         )}
         {!loading && <Pagination page={page} setPage={setPage} count={filtered.length} />}
       </div>
-      {viewing && <AppointmentDetails appointment={viewing} onClose={() => setViewing(null)} onEdit={() => { setEditing(viewing); setViewing(null); }} />}
-      {editing && <AppointmentEditor appointment={editing} onClose={() => setEditing(null)} onSaved={saveEdit} />}
+      {viewing && <AppointmentDetails appointment={viewing} onClose={() => setViewing(null)} onStatus={updateStatus} />}
     </section>
   );
 }
