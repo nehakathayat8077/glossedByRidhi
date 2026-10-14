@@ -21,6 +21,7 @@ import Footer from './Footer';
 import CartDrawer from './CartDrawer';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabaseClient';
+import { ORDER_HISTORY_CHANGED_EVENT } from '../lib/orders';
 
 const tabs = [
   { id: 'overview', label: 'Overview', icon: Sparkles },
@@ -189,6 +190,8 @@ function CustomerAccount() {
   const [signOutError, setSignOutError] = useState('');
   const [profileName, setProfileName] = useState('');
   const [profilePhone, setProfilePhone] = useState('');
+  const [profileUserId, setProfileUserId] = useState(null);
+  const [profileLoading, setProfileLoading] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
   const [profileMessage, setProfileMessage] = useState('');
   const [profileError, setProfileError] = useState('');
@@ -198,14 +201,45 @@ function CustomerAccount() {
   const [passwordError, setPasswordError] = useState('');
   const [savingPassword, setSavingPassword] = useState(false);
   const user = session?.user;
-  const metadata = user?.user_metadata || {};
-  const firstName = profileName.trim().split(/\s+/)[0] || 'there';
   const today = localDateString();
 
   useEffect(() => {
-    setProfileName(metadata.full_name || metadata.name || '');
-    setProfilePhone(metadata.phone || metadata.phone_number || '');
-  }, [user?.id, metadata.full_name, metadata.name, metadata.phone, metadata.phone_number]);
+    if (!user?.id) {
+      setProfileUserId(null);
+      setProfileName('');
+      setProfilePhone('');
+      return undefined;
+    }
+
+    let active = true;
+    setProfileUserId(null);
+    setProfileName('');
+    setProfilePhone('');
+    setProfileError('');
+    setProfileLoading(true);
+
+    supabase.auth.getUser().then(({ data, error: profileLoadError }) => {
+      if (!active) return;
+      if (profileLoadError) throw profileLoadError;
+      if (data.user?.id !== user.id) {
+        throw new Error('The current profile does not match the signed-in account.');
+      }
+
+      const currentMetadata = data.user.user_metadata || {};
+      setProfileName(currentMetadata.full_name || currentMetadata.name || '');
+      setProfilePhone(currentMetadata.phone || currentMetadata.phone_number || '');
+      setProfileUserId(user.id);
+    }).catch((profileLoadError) => {
+      if (!active) return;
+      setProfileError(profileLoadError.message || 'Could not load your profile details.');
+    }).finally(() => {
+      if (active) setProfileLoading(false);
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [user?.id]);
 
   const loadHistory = useCallback(async () => {
     if (!user?.id) return;
@@ -263,6 +297,30 @@ function CustomerAccount() {
     if (user?.id) void loadHistory();
   }, [loadHistory, user?.id]);
 
+  useEffect(() => {
+    if (!user?.id) return undefined;
+
+    let refreshTimer;
+    const scheduleRefresh = () => {
+      window.clearTimeout(refreshTimer);
+      refreshTimer = window.setTimeout(() => void loadHistory(), 50);
+    };
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === 'visible') scheduleRefresh();
+    };
+
+    window.addEventListener(ORDER_HISTORY_CHANGED_EVENT, scheduleRefresh);
+    window.addEventListener('focus', scheduleRefresh);
+    document.addEventListener('visibilitychange', refreshWhenVisible);
+
+    return () => {
+      window.clearTimeout(refreshTimer);
+      window.removeEventListener(ORDER_HISTORY_CHANGED_EVENT, scheduleRefresh);
+      window.removeEventListener('focus', scheduleRefresh);
+      document.removeEventListener('visibilitychange', refreshWhenVisible);
+    };
+  }, [loadHistory, user?.id]);
+
   const upcomingAppointments = useMemo(() => appointments
     .filter((appointment) => appointment.appointment_date >= today
       && activeAppointmentStatuses.includes(appointment.status))
@@ -288,8 +346,12 @@ function CustomerAccount() {
         data: { full_name: profileName.trim(), phone: profilePhone.trim() },
       });
       if (updateError) throw updateError;
+      if (data.user?.id !== user?.id) {
+        throw new Error('The saved profile does not match the signed-in account.');
+      }
       setProfileName(data.user.user_metadata?.full_name || '');
       setProfilePhone(data.user.user_metadata?.phone || '');
+      setProfileUserId(user.id);
       setProfileMessage('Your profile details have been saved.');
     } catch (updateError) {
       setProfileError(updateError.message || 'Could not update your profile.');
@@ -336,6 +398,9 @@ function CustomerAccount() {
       setSigningOut(false);
     }
   };
+  const visibleProfileName = profileUserId === user?.id ? profileName : '';
+  const visibleProfilePhone = profileUserId === user?.id ? profilePhone : '';
+  const visibleFirstName = visibleProfileName.trim().split(/\s+/)[0] || 'there';
 
   if (authLoading) return <main className="customer-account-state">Checking your account…</main>;
   if (!user) return <Navigate to="/login" replace state={{ from: '/account' }} />;
@@ -347,7 +412,7 @@ function CustomerAccount() {
         <header className="customer-dashboard-header">
           <div>
             <span className="admin-eyebrow">YOUR GLOSSEDBYRIDHI ACCOUNT</span>
-            <h1>Welcome back, {firstName}<span>✦</span></h1>
+            <h1>Welcome back, {visibleFirstName}<span>✦</span></h1>
             <p>Your orders, appointments, and personal details, all in one place.</p>
           </div>
           <div className="customer-account-actions">
@@ -472,18 +537,19 @@ function CustomerAccount() {
               <AccountPanel title="Personal details">
                 <form className="customer-dashboard-form" onSubmit={saveProfile}>
                   <label className="admin-field">Full name
-                    <input autoComplete="name" maxLength={120} minLength={2} onChange={(event) => setProfileName(event.target.value)} required value={profileName} />
+                    <input autoComplete="name" disabled={profileLoading} maxLength={120} minLength={2} onChange={(event) => setProfileName(event.target.value)} required value={visibleProfileName} />
                   </label>
                   <label className="admin-field">Email
                     <input autoComplete="email" readOnly type="email" value={user.email || ''} />
                   </label>
                   <label className="admin-field">Phone number
-                    <input autoComplete="tel" maxLength={30} onChange={(event) => setProfilePhone(event.target.value)} type="tel" value={profilePhone} />
+                    <input autoComplete="tel" disabled={profileLoading} maxLength={30} onChange={(event) => setProfilePhone(event.target.value)} type="tel" value={visibleProfilePhone} />
                   </label>
                   <p className="customer-dashboard-footnote">Your name and phone are saved to your secure account profile. Email is managed by your sign-in settings.</p>
+                  {profileLoading && <p className="customer-account-muted" role="status">Loading your profile…</p>}
                   {profileError && <p className="admin-error" role="alert">{profileError}</p>}
                   {profileMessage && <p className="customer-dashboard-success" role="status">{profileMessage}</p>}
-                  <button className="btn" disabled={savingProfile}>{savingProfile ? 'Saving…' : 'Save profile'}</button>
+                  <button className="btn" disabled={savingProfile || profileLoading}>{savingProfile ? 'Saving…' : 'Save profile'}</button>
                 </form>
               </AccountPanel>
 

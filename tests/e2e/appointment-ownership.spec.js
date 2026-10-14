@@ -59,6 +59,11 @@ async function signInCustomer(page) {
       user: customer,
     }),
   }));
+  await page.route(/\/auth\/v1\/user(?:\?.*)?$/, (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify(customer),
+  }));
   await page.goto('/login');
   const dialog = page.getByRole('dialog', { name: 'Welcome back' });
   await dialog.getByLabel('Email').fill(customer.email);
@@ -114,20 +119,59 @@ test('authenticated booking leaves ownership assignment to the database', async 
   expect(submittedAppointment).not.toHaveProperty('user_id');
 });
 
-test('customer dashboard filters appointment history by the authenticated user', async ({ page }) => {
+test('customer dashboard shows each owned order and filters account history by the authenticated user', async ({ page }) => {
   await signInCustomer(page);
   let appointmentRequestUrl;
+  let orderRequestUrl;
+  let orderRequestCount = 0;
   await page.route(/\/rest\/v1\/appointments(?:\?.*)?$/, async (route) => {
     appointmentRequestUrl = route.request().url();
     await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
   });
-  await page.route(/\/rest\/v1\/orders(?:\?.*)?$/, (route) => route.fulfill({
-    status: 200,
-    contentType: 'application/json',
-    body: '[]',
-  }));
+  await page.route(/\/rest\/v1\/orders(?:\?.*)?$/, async (route) => {
+    orderRequestUrl = route.request().url();
+    orderRequestCount += 1;
+    const paymentComplete = orderRequestCount > 1;
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify([
+        {
+          id: '11111111-1111-4111-8111-111111111111',
+          items: [{ id: 'product-one', name: 'Rose Press-ons', qty: 1, unit_price: 499, line_total: 499 }],
+          total: 499,
+          status: paymentComplete ? 'paid' : 'new',
+          payment_method: 'cod',
+          payment_status: paymentComplete ? 'paid' : 'pending',
+          created_at: '2026-10-14T10:00:00.000Z',
+        },
+        {
+          id: '22222222-2222-4222-8222-222222222222',
+          items: [{ id: 'product-two', name: 'Pearl Nail Kit', qty: 2, unit_price: 200, line_total: 400 }],
+          total: 460,
+          status: 'shipped',
+          payment_method: 'qr_whatsapp',
+          payment_status: 'paid',
+          created_at: '2026-10-13T10:00:00.000Z',
+        },
+      ]),
+    });
+  });
 
   await page.goto('/account');
   await expect(page.getByRole('heading', { name: 'Welcome back, Ridhi' })).toBeVisible();
   await expect.poll(() => appointmentRequestUrl).toContain(`user_id=eq.${customerId}`);
+  await expect.poll(() => orderRequestUrl).toContain(`user_id=eq.${customerId}`);
+
+  await page.getByRole('tab', { name: 'My Orders' }).click();
+  await expect(page.getByRole('heading', { name: '#11111111-1111-4111-8111-111111111111' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '#22222222-2222-4222-8222-222222222222' })).toBeVisible();
+  await expect(page.getByText('Rose Press-ons × 1')).toBeVisible();
+  await expect(page.getByText('Pearl Nail Kit × 2')).toBeVisible();
+  await expect(page.getByText('Payment pending')).toBeVisible();
+
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await expect.poll(() => orderRequestCount).toBe(2);
+  await expect(page.getByText('Payment pending')).toHaveCount(0);
+  await expect(page.getByText('Paid', { exact: true }).first()).toBeVisible();
 });

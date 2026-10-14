@@ -26,6 +26,11 @@ async function mockSignIn(page, user = customer) {
     contentType: 'application/json',
     body: JSON.stringify(sessionResponse(user)),
   }));
+  await page.route(/\/auth\/v1\/user(?:\?.*)?$/, (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify(user),
+  }));
 }
 
 async function mockAdminData(page) {
@@ -133,4 +138,14 @@ test('admin password sign-in opens the existing management dashboard', async ({ 
   await expect(page.locator('.admin-topbar h1')).toHaveText('Appointments');
   await expect.poll(() => appointmentRequestUrl).not.toBeUndefined();
   expect(appointmentRequestUrl).not.toContain('user_id=eq.');
+
+  let orderRequestUrl;
+  await page.route(/\/rest\/v1\/orders(?:\?.*)?$/, async (route) => {
+    orderRequestUrl = route.request().url();
+    await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+  });
+  await page.getByRole('link', { name: 'Orders' }).click();
+  await expect(page.locator('.admin-topbar h1')).toHaveText('Orders');
+  await expect.poll(() => orderRequestUrl).not.toBeUndefined();
+  expect(orderRequestUrl).not.toContain('user_id=eq.');
 });

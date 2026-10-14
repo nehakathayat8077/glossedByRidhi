@@ -31,6 +31,11 @@ async function createCustomerPage(browser, user, cartLabel, wishlist) {
       user,
     }),
   }));
+  await page.route(/\/auth\/v1\/user(?:\?.*)?$/, (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify(user),
+  }));
   await page.route(/\/rest\/v1\/customer_store_state(?:\?.*)?$/, async (route) => {
     if (route.request().method() === 'GET') {
       loadedStateUrl = route.request().url();
@@ -120,6 +125,11 @@ test('shows the signed-in customer profile from that customer auth record', asyn
       user: { ...user, user_metadata: { ...user.user_metadata, phone: '9876543210' } },
     }),
   }));
+  await page.route(/\/auth\/v1\/user(?:\?.*)?$/, (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ ...user, user_metadata: { ...user.user_metadata, phone: '9876543210' } }),
+  }));
   await page.route(/\/rest\/v1\/customer_store_state(?:\?.*)?$/, (route) => route.fulfill({
     status: 200,
     contentType: 'application/json',
@@ -158,6 +168,11 @@ test('clears authenticated cart state on logout and restores the guest cart', as
       refresh_token: 'logout-refresh-token',
       user,
     }),
+  }));
+  await page.route(/\/auth\/v1\/user(?:\?.*)?$/, (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify(user),
   }));
   await page.route(/\/auth\/v1\/logout(?:\?.*)?$/, (route) => route.fulfill({ status: 204 }));
   await page.route(/\/rest\/v1\/customer_store_state(?:\?.*)?$/, (route) => route.fulfill({

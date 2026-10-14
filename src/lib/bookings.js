@@ -16,6 +16,7 @@ export async function saveBooking(booking) {
     notes: notes || null,
   };
 
+  // The database trigger assigns auth.uid(); ownership must not come from client input.
   const { error } = await supabase.from('appointments').insert(appointment);
   if (error) throw error;
 }

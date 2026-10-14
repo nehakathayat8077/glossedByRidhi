@@ -115,8 +115,10 @@ grant insert (name, phone, email, service_id, design_id, appointment_date, time_
 grant insert (email) on public.newsletter_subscribers to anon;
 grant select, insert, update, delete
   on public.services, public.designs, public.products,
-     public.orders, public.newsletter_subscribers, public.business_settings
+     public.newsletter_subscribers, public.business_settings
   to authenticated;
+revoke all privileges on public.orders from public, anon, authenticated;
+grant select, update (status) on public.orders to authenticated;
 revoke all privileges on public.customer_store_state from public, anon, authenticated;
 grant select, insert, update on public.customer_store_state to authenticated;
 revoke update on public.appointments from public, anon, authenticated;
