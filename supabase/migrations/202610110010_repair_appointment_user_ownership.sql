@@ -30,12 +30,12 @@ begin
     raise exception 'Expected secure public.is_admin() using app_metadata role was not found; inspect the live function before applying.';
   end if;
 
-  if to_regprocedure('public.create_order(text,text,text,jsonb,text)') is null then
-    raise exception 'Expected public.create_order(text,text,text,jsonb,text) was not found; inspect the live RPC signature before applying.';
+  if to_regprocedure('public.create_order(text,text,jsonb,text,text)') is null then
+    raise exception 'Expected public.create_order(text,text,jsonb,text,text) was not found; inspect the live RPC signature before applying.';
   end if;
 
   select pg_get_functiondef(
-    'public.create_order(text,text,text,jsonb,text)'::regprocedure
+    'public.create_order(text,text,jsonb,text,text)'::regprocedure
   ) into order_definition;
 
   if order_definition not ilike '%security definer%'
@@ -336,7 +336,7 @@ $$;
 grant update (status) on public.appointments to authenticated;
 
 grant select, insert, update, delete on public.orders to authenticated;
-grant execute on function public.create_order(text, text, text, jsonb, text)
+grant execute on function public.create_order(text, text, jsonb, text, text)
   to anon, authenticated;
 
 notify pgrst, 'reload schema';

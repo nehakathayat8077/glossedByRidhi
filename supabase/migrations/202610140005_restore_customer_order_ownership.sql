@@ -103,7 +103,7 @@ grant select, update (status) on public.orders to authenticated;
 
 -- Checkout remains through the existing SECURITY DEFINER RPC; guest checkout
 -- remains supported by that function with a NULL user_id.
-grant execute on function public.create_order(text, text, text, jsonb, text)
+grant execute on function public.create_order(text, text, jsonb, text, text)
   to anon, authenticated;
 
 create policy "Customers can read own orders"

@@ -26,12 +26,12 @@ begin
     raise exception 'public.is_admin() does not match the trusted app_metadata role check; inspect it before applying.';
   end if;
 
-  if to_regprocedure('public.create_order(text,text,text,jsonb,text)') is null then
+  if to_regprocedure('public.create_order(text,text,jsonb,text,text)') is null then
     raise exception 'The existing create_order checkout RPC is missing; inspect the current checkout schema before applying.';
   end if;
 
   select pg_get_functiondef(
-    'public.create_order(text,text,text,jsonb,text)'::regprocedure
+    'public.create_order(text,text,jsonb,text,text)'::regprocedure
   ) into checkout_definition;
 
   if checkout_definition not ilike '%security definer%'
@@ -92,11 +92,11 @@ begin
   select created.order_id, created.order_total
     into created_order_id, created_order_total
     from public.create_order(
-      p_customer_name,
-      p_phone,
       p_address,
+      p_customer_name,
       p_items,
-      p_payment_method
+      p_payment_method,
+      p_phone
     ) as created;
 
   update public.orders

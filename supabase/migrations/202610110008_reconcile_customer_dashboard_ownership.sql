@@ -169,11 +169,11 @@ end;
 $$;
 
 create function public.create_order(
-  p_customer_name text,
-  p_phone text,
   p_address text,
+  p_customer_name text,
   p_items jsonb,
-  p_payment_method text
+  p_payment_method text,
+  p_phone text
 )
 returns table (order_id uuid, order_total numeric)
 language plpgsql
@@ -290,8 +290,8 @@ begin
 end;
 $$;
 
-revoke all on function public.create_order(text, text, text, jsonb, text) from public;
-grant execute on function public.create_order(text, text, text, jsonb, text) to anon, authenticated;
+revoke all on function public.create_order(text, text, jsonb, text, text) from public;
+grant execute on function public.create_order(text, text, jsonb, text, text) to anon, authenticated;
 
 notify pgrst, 'reload schema';
 

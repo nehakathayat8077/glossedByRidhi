@@ -126,11 +126,11 @@ test('authenticated checkout saves through the RPC and the order appears in that
   await expect(page.getByText(new RegExp(`Order ${orderId.slice(0, 8)} is saved for ₹659`))).toBeVisible();
   expect(orderRpcAuthorization).toContain('customer-access-token');
   expect(orderRpcPayload).toMatchObject({
-    p_customer_name: 'Aarav Sharma',
-    p_phone: '9876543210',
     p_address: '221 Rose Avenue, Jaipur',
-    p_payment_method: 'qr_whatsapp',
+    p_customer_name: 'Aarav Sharma',
     p_items: [{ id: productId, qty: 1 }],
+    p_payment_method: 'qr_whatsapp',
+    p_phone: '9876543210',
   });
   expect(orderRpcPayload).not.toHaveProperty('user_id');
 
