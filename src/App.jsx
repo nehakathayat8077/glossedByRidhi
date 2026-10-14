@@ -10,6 +10,7 @@ import Footer from './components/Footer';
 import CartDrawer from './components/CartDrawer';
 import CustomerAccount from './components/CustomerAccount';
 import CustomerAuth from './components/CustomerAuth';
+import Chatbot from './components/Chatbot';
 import { Route, Routes, useLocation } from 'react-router-dom';
 
 const AdminApp = lazy(() => import('./admin/AdminApp'));
@@ -51,10 +52,13 @@ function CustomerWebsite() {
 
 export default function App() {
   return (
-    <Routes>
-      <Route path="/admin/*" element={<Suspense fallback={<div className="admin-state">Loading admin dashboard…</div>}><AdminApp /></Suspense>} />
-      <Route path="/account" element={<CustomerAccount />} />
-      <Route path="*" element={<CustomerWebsite />} />
-    </Routes>
+    <>
+      <Routes>
+        <Route path="/admin/*" element={<Suspense fallback={<div className="admin-state">Loading admin dashboard…</div>}><AdminApp /></Suspense>} />
+        <Route path="/account" element={<CustomerAccount />} />
+        <Route path="*" element={<CustomerWebsite />} />
+      </Routes>
+      <Chatbot />
+    </>
   );
 }
