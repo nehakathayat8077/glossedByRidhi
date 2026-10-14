@@ -165,6 +165,18 @@ test('admin order creation links the order through the customer account email', 
     contentType: 'application/json',
     body: JSON.stringify([{ id: productId, name: 'Velvet Press-ons', price: 599 }]),
   }));
+  await page.route(/\/rest\/v1\/rpc\/admin_find_customer_by_email(?:\?.*)?$/, async (route) => {
+    expect(route.request().postDataJSON()).toEqual({ p_customer_email: 'customer@example.com' });
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify([{
+        user_id: customer.id,
+        email: customer.email,
+        full_name: 'Ridhi Sharma',
+      }]),
+    });
+  });
   await page.route(/\/rest\/v1\/rpc\/admin_create_order(?:\?.*)?$/, async (route) => {
     createOrderPayload = route.request().postDataJSON();
     await route.fulfill({
@@ -182,6 +194,8 @@ test('admin order creation links the order through the customer account email', 
   await page.getByRole('button', { name: 'Create customer order' }).click();
 
   await page.getByLabel('Customer account email').fill('customer@example.com');
+  await page.getByRole('button', { name: 'Find customer account' }).click();
+  await expect(page.getByText(new RegExp(`Verified account: customer@example.com · ${customer.id}`))).toBeVisible();
   await page.getByLabel('Customer name').fill('Ridhi Sharma');
   await page.getByLabel('Phone').fill('9876543210');
   await page.getByLabel('Delivery address').fill('221 Rose Avenue, Jaipur');
@@ -191,12 +205,77 @@ test('admin order creation links the order through the customer account email', 
 
   await expect(page.getByText(/Customer order created.*payment pending/i)).toBeVisible();
   expect(createOrderPayload).toMatchObject({
-    p_customer_email: 'customer@example.com',
+    p_customer_id: customer.id,
     p_customer_name: 'Ridhi Sharma',
     p_phone: '9876543210',
     p_address: '221 Rose Avenue, Jaipur',
     p_items: [{ id: productId, qty: 1 }],
     p_payment_method: 'cod',
   });
-  expect(createOrderPayload).not.toHaveProperty('user_id');
+  expect(createOrderPayload).not.toHaveProperty('p_customer_email');
+});
+
+test('admin links only an unowned order to the verified customer user ID', async ({ page }) => {
+  const orderId = '22222222-2222-4222-8222-222222222222';
+  let linkedUserId = null;
+  let linkPayload;
+  const orderRow = () => ({
+    id: orderId,
+    user_id: linkedUserId,
+    customer_name: 'Aarav Sharma',
+    phone: '9876543210',
+    address: '221 Rose Avenue, Jaipur',
+    items: [{ id: 'product-one', name: 'Velvet Press-ons', qty: 1, unit_price: 599, line_total: 599 }],
+    total: 659,
+    status: 'new',
+    payment_method: 'cod',
+    payment_status: 'pending',
+    created_at: '2026-10-14T10:00:00.000Z',
+  });
+
+  await mockSignIn(page, {
+    ...customer,
+    email: 'admin@example.com',
+    app_metadata: { provider: 'email', providers: ['email'], role: 'admin' },
+  });
+  await mockAdminData(page);
+  await page.route(/\/rest\/v1\/orders(?:\?.*)?$/, (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify([orderRow()]),
+  }));
+  await page.route(/\/rest\/v1\/rpc\/admin_find_customer_by_email(?:\?.*)?$/, (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify([{
+      user_id: customer.id,
+      email: customer.email,
+      full_name: 'Ridhi Sharma',
+    }]),
+  }));
+  await page.route(/\/rest\/v1\/rpc\/admin_link_order_to_customer(?:\?.*)?$/, async (route) => {
+    linkPayload = route.request().postDataJSON();
+    linkedUserId = linkPayload.p_customer_id;
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify([{ order_id: orderId, user_id: linkedUserId }]),
+    });
+  });
+
+  await page.goto('/admin/login');
+  await page.getByLabel('Email').fill('admin@example.com');
+  await page.getByLabel('Password').fill('admin-password');
+  await page.getByRole('button', { name: 'Sign in securely' }).click();
+  await page.getByRole('link', { name: 'Orders' }).click();
+  await page.getByRole('button', { name: `View order ${orderId}` }).click();
+  const details = page.locator('.admin-modal').last();
+  await expect(details).toContainText('Not linked');
+  await details.getByLabel('Customer account email').fill(customer.email);
+  await details.getByRole('button', { name: 'Find customer account' }).click();
+  await expect(details.getByText(new RegExp(`Verified account: ${customer.email} · ${customer.id}`))).toBeVisible();
+  await details.getByRole('button', { name: 'Link this order' }).click();
+
+  await expect(page.getByText(new RegExp(`Order linked to ${customer.email}`))).toBeVisible();
+  expect(linkPayload).toEqual({ p_order_id: orderId, p_customer_id: customer.id });
 });

@@ -12,6 +12,18 @@ function formatDate(value) {
   return value ? new Date(value).toLocaleDateString() : '—';
 }
 
+async function findAdminCustomer(email) {
+  const { data, error } = await supabase.rpc('admin_find_customer_by_email', {
+    p_customer_email: email.trim(),
+  });
+  if (error) throw error;
+  const customer = Array.isArray(data) ? data[0] : data;
+  if (!customer?.user_id || !customer.email) {
+    throw new Error('No customer account was found for that email address.');
+  }
+  return customer;
+}
+
 function OperationsToolbar({ query, setQuery, status, setStatus, statuses, date, setDate, searchPlaceholder }) {
   return (
     <div className="admin-toolbar">
@@ -211,9 +223,14 @@ function AppointmentManager() {
   );
 }
 
-function OrderDetails({ order, onClose, onStatus }) {
+function OrderDetails({ order, onClose, onStatus, onLink }) {
   const [status, setStatus] = useState(order.status);
   const [saving, setSaving] = useState(false);
+  const [customerEmail, setCustomerEmail] = useState('');
+  const [matchedCustomer, setMatchedCustomer] = useState(null);
+  const [customerLookupLoading, setCustomerLookupLoading] = useState(false);
+  const [linkingCustomer, setLinkingCustomer] = useState(false);
+  const [linkError, setLinkError] = useState('');
 
   const save = async () => {
     setSaving(true);
@@ -221,15 +238,62 @@ function OrderDetails({ order, onClose, onStatus }) {
     setSaving(false);
   };
 
+  const lookupCustomer = async () => {
+    setCustomerLookupLoading(true);
+    setLinkError('');
+    setMatchedCustomer(null);
+    try {
+      setMatchedCustomer(await findAdminCustomer(customerEmail));
+    } catch (lookupError) {
+      setLinkError(lookupError.message || 'Could not look up that customer account.');
+    } finally {
+      setCustomerLookupLoading(false);
+    }
+  };
+
+  const linkCustomer = async () => {
+    if (!matchedCustomer?.user_id) return;
+    setLinkingCustomer(true);
+    setLinkError('');
+    try {
+      await onLink(order, matchedCustomer);
+      onClose();
+    } catch (ownershipError) {
+      setLinkError(ownershipError.message || 'Could not link this order.');
+    } finally {
+      setLinkingCustomer(false);
+    }
+  };
+
   return (
     <div className="admin-modal-backdrop">
       <div className="admin-modal">
         <div className="admin-modal-heading"><div><span className="admin-eyebrow">ORDER #{order.id.slice(0, 8)}</span><h2>Order details</h2></div><button className="admin-icon-button" onClick={onClose} aria-label="Close"><X /></button></div>
         <div className="admin-order-details">
-          <p><strong>Customer</strong>{order.customer_name}</p><p><strong>Phone</strong>{order.phone}</p><p><strong>Address</strong>{order.address}</p><p><strong>Placed</strong>{formatDate(order.created_at)}</p>
+          <p><strong>Customer</strong>{order.customer_name}</p><p><strong>Account ID</strong>{order.user_id || 'Not linked'}</p><p><strong>Phone</strong>{order.phone}</p><p><strong>Address</strong>{order.address}</p><p><strong>Placed</strong>{formatDate(order.created_at)}</p>
           <p><strong>Payment method</strong>{order.payment_method === 'cod' ? 'Cash on Delivery' : order.payment_method === 'qr_whatsapp' ? 'QR via WhatsApp' : 'Not recorded'}</p>
           <p><strong>Payment status</strong>{order.payment_status || 'Not recorded'}</p>
         </div>
+        {!order.user_id && (
+          <section aria-label="Link order to customer account">
+            <h3 className="admin-subheading">Link to a customer account</h3>
+            <label className="admin-field">Customer account email
+              <input type="email" autoComplete="email" value={customerEmail} onChange={(event) => {
+                setCustomerEmail(event.target.value);
+                setMatchedCustomer(null);
+                setLinkError('');
+              }} />
+            </label>
+            <div className="admin-modal-actions">
+              <button type="button" className="admin-secondary-button" disabled={customerLookupLoading || !customerEmail.trim()} onClick={lookupCustomer}>
+                {customerLookupLoading ? 'Looking up…' : 'Find customer account'}
+              </button>
+              {matchedCustomer && <button type="button" className="btn" disabled={linkingCustomer} onClick={linkCustomer}>{linkingCustomer ? 'Linking…' : 'Link this order'}</button>}
+            </div>
+            {matchedCustomer && <p className="admin-note">Verified account: {matchedCustomer.email} · {matchedCustomer.user_id}</p>}
+            {linkError && <p className="admin-error" role="alert">{linkError}</p>}
+          </section>
+        )}
         <h3 className="admin-subheading">Purchased items (saved order snapshot)</h3>
         {Array.isArray(order.items) && order.items.length ? <div className="admin-order-lines">{order.items.map((item, index) => <div key={`${item.id || item.name}-${index}`}><span>{item.name || 'Product'} × {item.qty || item.quantity || 1}</span><strong>₹{Number(item.line_total ?? (item.unit_price ?? item.price ?? 0) * (item.qty ?? item.quantity ?? 1)).toLocaleString('en-IN')}</strong></div>)}</div> : <p className="admin-empty">No item details were saved for this order.</p>}
         <p className="admin-order-total"><strong>Order total</strong><b>₹{Number(order.total).toLocaleString('en-IN')}</b></p>
@@ -251,6 +315,8 @@ function CreateCustomerOrder({ onClose, onCreated }) {
     address: '',
     paymentMethod: 'cod',
   });
+  const [matchedCustomer, setMatchedCustomer] = useState(null);
+  const [customerLookupLoading, setCustomerLookupLoading] = useState(false);
   const [items, setItems] = useState([{ productId: '', quantity: 1 }]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -285,13 +351,35 @@ function CreateCustomerOrder({ onClose, onCreated }) {
     ));
   };
 
+  const lookupCustomer = async () => {
+    setCustomerLookupLoading(true);
+    setError('');
+    setMatchedCustomer(null);
+    try {
+      const foundCustomer = await findAdminCustomer(customer.email);
+      setMatchedCustomer(foundCustomer);
+      setCustomer((current) => ({
+        ...current,
+        name: current.name || foundCustomer.full_name || '',
+      }));
+    } catch (lookupError) {
+      setError(lookupError.message || 'Could not look up that customer account.');
+    } finally {
+      setCustomerLookupLoading(false);
+    }
+  };
+
   const submit = async (event) => {
     event.preventDefault();
+    if (!matchedCustomer?.user_id) {
+      setError('Look up and select a verified customer account before creating the order.');
+      return;
+    }
     setSaving(true);
     setError('');
     try {
       const { data, error: createError } = await supabase.rpc('admin_create_order', {
-        p_customer_email: customer.email.trim(),
+        p_customer_id: matchedCustomer.user_id,
         p_customer_name: customer.name.trim(),
         p_phone: customer.phone.trim(),
         p_address: customer.address.trim(),
@@ -326,8 +414,16 @@ function CreateCustomerOrder({ onClose, onCreated }) {
         </div>
         <form onSubmit={submit}>
           <label className="admin-field">Customer account email
-            <input type="email" autoComplete="email" required value={customer.email} onChange={(event) => setCustomer({ ...customer, email: event.target.value })} />
+            <input type="email" autoComplete="email" required value={customer.email} onChange={(event) => {
+              setCustomer({ ...customer, email: event.target.value });
+              setMatchedCustomer(null);
+              setError('');
+            }} />
           </label>
+          <button type="button" className="admin-secondary-button" disabled={customerLookupLoading || !customer.email.trim()} onClick={lookupCustomer}>
+            {customerLookupLoading ? 'Looking up…' : 'Find customer account'}
+          </button>
+          {matchedCustomer && <p className="admin-note" role="status">Verified account: {matchedCustomer.email} · {matchedCustomer.user_id}</p>}
           <label className="admin-field">Customer name
             <input autoComplete="name" required minLength={2} maxLength={120} value={customer.name} onChange={(event) => setCustomer({ ...customer, name: event.target.value })} />
           </label>
@@ -363,7 +459,7 @@ function CreateCustomerOrder({ onClose, onCreated }) {
           {error && <p className="admin-error" role="alert">{error}</p>}
           <div className="admin-modal-actions">
             <button type="button" className="admin-secondary-button" onClick={onClose} disabled={saving}>Cancel</button>
-            <button type="submit" className="btn" disabled={saving || productsLoading || !products.length}>{saving ? 'Creating…' : 'Create order'}</button>
+            <button type="submit" className="btn" disabled={saving || customerLookupLoading || !matchedCustomer?.user_id || productsLoading || !products.length}>{saving ? 'Creating…' : 'Create order'}</button>
           </div>
         </form>
       </section>
@@ -427,6 +523,16 @@ function OrdersManager() {
     notify(`Customer order created. Total: ₹${Number(order.order_total).toLocaleString('en-IN')}; payment pending.`);
   };
 
+  const linkOrderToCustomer = async (order, customer) => {
+    const { error: linkError } = await supabase.rpc('admin_link_order_to_customer', {
+      p_order_id: order.id,
+      p_customer_id: customer.user_id,
+    });
+    if (linkError) throw linkError;
+    await load();
+    notify(`Order linked to ${customer.email}.`);
+  };
+
   return (
     <section className="admin-page">
       <div className="admin-page-intro"><div><span className="admin-eyebrow">CUSTOMER PURCHASES</span><h2>Orders</h2></div><div className="admin-row-actions"><span className="admin-record-count">{records.length} total</span><button type="button" className="btn" onClick={() => setCreateOpen(true)}>Create customer order</button></div></div>
@@ -449,7 +555,7 @@ function OrdersManager() {
         )}
         {!loading && <Pagination page={page} setPage={setPage} count={filtered.length} />}
       </div>
-      {selected && <OrderDetails order={selected} onClose={() => setSelected(null)} onStatus={updateStatus} />}
+      {selected && <OrderDetails order={selected} onClose={() => setSelected(null)} onStatus={updateStatus} onLink={linkOrderToCustomer} />}
       {createOpen && <CreateCustomerOrder onClose={() => setCreateOpen(false)} onCreated={handleOrderCreated} />}
     </section>
   );
